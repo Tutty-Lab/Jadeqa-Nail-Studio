@@ -1,7 +1,7 @@
 // ============================================================================
 // Verbindung zur gemeinsamen Supabase-Datenbank. Alle Filialen hängen an
 // derselben Datenbank; getrennt wird über store_id = id der Filiale
-// (stores.ts: "arkaden", "papenstieg").
+// (stores.ts: "jadeqa").
 // ============================================================================
 
 import { createClient } from "@supabase/supabase-js";

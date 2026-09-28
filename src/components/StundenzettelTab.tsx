@@ -82,9 +82,9 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
 
   /** Mitarbeiter dieser Filiale, die in den Ausdruck kommen. */
   const chosenFor = (s: UseScheduleReturn): Employee[] => {
-    if (who === "all") return s.schedule.employees;
+    if (who === "all") return s.activeEmployees;
     if (s.storeId !== whoStoreId) return [];
-    return s.schedule.employees.filter((e) => e.id === whoEmpId);
+    return s.activeEmployees.filter((e) => e.id === whoEmpId);
   };
   /** employeeIds für den Dienstplan: undefined = ganze Filiale, [] = gar nicht. */
   const employeeIdsFor = (s: UseScheduleReturn): string[] | undefined => {
@@ -98,8 +98,8 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
   const previewStore = who === "all" ? primary : stores.find((s) => s.storeId === whoStoreId) ?? primary;
   const previewEmployee =
     who === "all"
-      ? previewStore.schedule.employees[0] ?? null
-      : previewStore.schedule.employees.find((e) => e.id === whoEmpId) ?? null;
+      ? previewStore.activeEmployees[0] ?? null
+      : previewStore.activeEmployees.find((e) => e.id === whoEmpId) ?? null;
   const whoTag = who === "all" ? "tat_ca" : safeFileName(previewEmployee?.name ?? who);
 
   const startPdf = () => {
@@ -291,7 +291,7 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
   // — nội dung bị xoá mất và tờ in ra trắng. Vùng này vốn đã ẩn trên màn hình
   // nên cứ để nguyên; lần in sau sẽ ghi đè bằng danh sách mới.
 
-  if (stores.every((s) => s.schedule.employees.length === 0)) {
+  if (stores.every((s) => s.activeEmployees.length === 0)) {
     return (
       <div className="no-print rounded bg-white border border-slate-200 p-6 text-center text-slate-400">
         Vui lòng thêm nhân viên và tạo lịch làm việc trước.
@@ -333,7 +333,7 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
               >
                 <option value="all">Tất cả (cả tiệm)</option>
                 {stores.flatMap((s) =>
-                  s.schedule.employees.map((e) => (
+                  s.activeEmployees.map((e) => (
                     <option key={`${s.storeId}:${e.id}`} value={`${s.storeId}:${e.id}`}>
                       {s.storeConfig.shortName} · {e.name}
                     </option>
@@ -380,7 +380,7 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
               </button>
               <button
                 type="button"
-                disabled={pdfBusy || stores.every((s) => s.schedule.employees.length === 0)}
+                disabled={pdfBusy || stores.every((s) => s.activeEmployees.length === 0)}
                 onClick={() => {
                   if (isLocked) unlockMonth();
                   generate();

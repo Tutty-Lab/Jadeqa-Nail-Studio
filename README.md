@@ -1,123 +1,97 @@
-# Dienstplan & Stundenzettel — King Nail Braunschweig
+# Dienstplan & Stundenzettel — J'ADEQA Nagelstudio
 
-Eine App für die zwei Nagelstudios desselben Betreibers in Braunschweig
-(Niedersachsen). Die Oberfläche ist auf Vietnamesisch. Es gibt KEIN Umschalten
-zwischen den Filialen: jeder Tab zeigt beide Studios untereinander, jedes mit
-eigener Überschrift. Monat und Jahr stehen oben in der Kopfzeile und gelten für
-beide. Jedes Studio hat eigene Mitarbeiter, eigene Pläne, ein eigenes Passwort
-und eine eigene Zeile in Supabase; „Tạo lịch làm việc" erzeugt beide Pläne, und
-die Bảng chấm công gibt EINE PDF mit den Seiten beider Studios aus.
+App für das Nagelstudio **J'ADEQA**, Südring 2, 67240 Bobenheim-Roxheim
+(Rheinland-Pfalz). Oberfläche auf Vietnamesisch. Ein Laden, ein Team, ein
+Passwort, eine Zeile in Supabase (`store_id = "jadeqa"`).
 
-| Filiale | `store_id` | Anschrift | Telefon |
-|---|---|---|---|
-| King Nail Schloss Arkaden | `arkaden` | Platz am Ritterbrunnen 1, 38100 Braunschweig (EG, neben Vodafone) | 0531 88532798 |
-| King Nail Papenstieg | `papenstieg` | Papenstieg 8, 38100 Braunschweig | +49 531 34967521 |
+## Öffnungszeiten
 
-## Öffnungszeiten (je Filiale verschieden, durchgehend offen)
-
-- **Schloss Arkaden:** Mo–Sa 09:30–20:00.
-- **Papenstieg:** Mo–Fr 09:00–19:00, Sa 09:00–18:00.
-- **Sonntag geschlossen**, ebenso an **gesetzlichen Feiertagen** (Ladenschluss).
-  Nur eine Datumsausnahme mit eigenen Zeiten öffnet einen solchen Tag.
-- Feiertage nach **Niedersachsen** (`src/lib/holidays.ts`): 10 Tage, mit
-  Reformationstag (31.10.), ohne Heilige Drei Könige, Fronleichnam und
-  Allerheiligen.
+- **Mo–Sa 09:30–20:00**, durchgehend (keine Mittagspause des Ladens).
+- **Sonntag geschlossen**, ebenso an **gesetzlichen Feiertagen**
+  (Rheinland-Pfalz, 11 Tage: mit Fronleichnam und Allerheiligen, ohne
+  Reformationstag – `src/lib/holidays.ts`).
 
 ## Vorgaben des Betriebs
 
-- **Die ganze Öffnungszeit ist besetzt** – von der ersten bis zur letzten Minute
-  mindestens eine Person (harte Regel `Trong giờ mở cửa` in beiden Studios).
-- **Hauptzeit:** Mo–Fr 15:00–19:00, Sa 11:00–19:00. Dort stehen mehr Leute:
-  Arkaden 2 Personen (samstags 3), Papenstieg 2 Personen (auch samstags).
-- **Tagesgewichte** (für beide gleich): Mo 1,2 · Di 1,0 · Mi 1,2 · Do 1,2 ·
-  **Fr 2,0 · Sa 2,0**. Freitag und Samstag sind die stärksten Tage.
-- **Feste Wochen für die Vollzeitkräfte:** Nguyen Xuan Manh, Pham Van Nha,
-  Nguyen Quang Huy (Arkaden) und Pham Duy Thang (Papenstieg) arbeiten höchstens
-  **5 Tage je Woche**; ihr Wochenrhythmus wiederholt sich in allen vollen Wochen
-  eines Monats. Die übrigen Verträge füllen danach die Hauptzeit und die
-  starken Tage auf.
-- **Schichtlängen 3–8 Stunden**, höchstens **8 bezahlte Stunden am Tag** und
-  höchstens 6 Tage am Stück. Alle Zeiten liegen auf dem 30-Minuten-Raster. Weil
-  durchgehend geöffnet ist, gibt es keine geteilten Tage.
+- **Die ganze Öffnungszeit ist besetzt** – von der ersten bis zur letzten
+  Minute mindestens eine Person. Im Planer ist ein leerer Laden zehnmal so
+  teuer wie eine fehlende zweite Person, und die Strafe zählt einmal je halbe
+  Stunde (nicht je Regel, sonst schiebt der Planer das Loch an den Rand).
+- **Hauptzeit:** Mo–Fr 15:00–19:00, Sa ab 11:00 – dort sollen **2 Personen**
+  da sein, höchstens 4.
+- **Tagesgewichte:** Mo 1,2 · Di 1,0 · Mi 1,2 · Do 1,2 · **Fr 2,0 · Sa 2,0**.
+- **Höchstens 8 bezahlte Stunden am Tag**, höchstens 6 Tage am Stück, alle
+  Zeiten auf dem 30-Minuten-Raster. Pause: über 6 h 30 Minuten, über 8 h 60
+  Minuten – und nach § 4 ArbZG nie mehr als 6 Stunden am Stück ohne Pause.
+- **Höchstens 5 Arbeitstage je Woche** für die Angestellten. Die Inhaberin ist
+  ausgenommen: 169 h passen in einem kurzen Monat sonst nicht (20 Tage × 8 h).
 
-## Belegschaft (Angabe des Betriebs, Stunden je MONAT)
+## Eintritt und Austritt (neu gegenüber den anderen Studio-Apps)
 
-**Schloss Arkaden (658 h):** Nguyen Xuan Manh 150, Pham Van Nha 150, Nguyen
-Quang Huy 130, Nguyen Thi Thu Hang 72, Do Thuy Hang 58, Nguyen Thi Khanh Huyen
-55, Dinh Thi Duyen 43.
+Im Nagelstudio wechselt das Team häufig. Jede Person hat im Tab „Nhân viên"
+ein **Ngày vào làm** (Eintritt) und ein **Ngày thôi làm** (Austritt):
 
-**Papenstieg (439 h):** Pham Duy Thang 160, Bui Thi Huyen 86, Nguyen Trong Hanh
-86, Nguyen Tien Long 64, Tang Thi Nhung 43.
+- Vor dem Eintritt und nach dem Austritt wird niemand eingeplant; der
+  Austrittstag selbst ist noch ein Arbeitstag.
+- Das **Monats-Soll wird anteilig** über die offenen Tage gerechnet. Wer am
+  15. anfängt, bekommt im ersten Monat rund das halbe Soll – genau wie auf der
+  Lohnabrechnung (680 € statt 1.200 € im Eintrittsmonat).
+- Kein Austritt eingetragen = die Person arbeitet weiter.
 
-Die Anstellungsart (Vollzeit/Teilzeit/Minijob) ist aus den Stunden abgeleitet
-und betrifft nur die Beschriftung des Stundenzettels, nicht die Planung. Die
-Verträge laufen über **Monatsstunden**; im Tab „Nhân viên" lässt sich je Person
-zwischen Monats- und Wochenvertrag umschalten.
+Damit plant dieselbe App jeden Monat richtig: oben in der Kopfzeile den Monat
+wählen, und es erscheinen nur die Leute, die damals da waren.
 
-## Planung
+## Belegschaft (aus den Lohnabrechnungen)
 
-`src/lib/weeklyScheduler.ts` verteilt das Monats-Soll auf die ISO-Wochen, dann
-auf die Tage (Tagesgewicht × Öffnungsdauer) und sucht je Woche die Kombination
-aus Arbeitstagen und Schichtlängen, die das Soll exakt trifft und der
-Nachfragekurve am nächsten kommt. Öffnungszeiten, Tagesgewichte und
-Besetzungsregeln kommen je Filiale aus `src/lib/stores.ts`. Danach:
+Ohne „Wöch.Arb.Zt." auf der Abrechnung: **Brutto ÷ Mindestlohn**
+(2025 = 12,82 €, 2026 = 13,90 €). Steht eine Wochenstundenzahl drauf, gilt die.
 
-- **Nachschlag (`topUpShortfalls`)**: Reste aus der 30-Minuten-Rundung hängen
-  sich an den Dienst, der der Besetzung am wenigsten schadet.
-- Ein Wochenrest unter 3 h wandert in die Nachbarwoche, statt einen
-  1–2-Stunden-Dienst zu erzeugen.
-- **Feinschliff je Tag**: Lage der Dienste und der Pausen nach der echten
-  Besetzung; die Pause liegt nie in der Hauptzeit.
+| Person | Eintritt | Austritt | Vertrag |
+|---|---|---|---|
+| Chu tiem (Inhaberin) | — | — | 169 h/Monat *(Annahme)* |
+| Thi Kim Oanh Pham | 01.11.2024 | — | 70,2 h/Monat (900 €) |
+| Tri Duc Nguyen | 01.05.2025 | — | 87,4 h/Monat (1.120 €) |
+| Dinh Hai Le | 15.05.2025 | **31.07.2025** | 93,6 h/Monat (1.200 €) |
+| Quynh Nhu Nguyen | 01.09.2025 | — | 19,5 h/Woche |
+| Van Anh Nguyen | 01.11.2025 | — | 5 h/Woche (Minijob) |
+| Thuy Linh Tran | 15.01.2026 | — | 19,5 h/Woche |
 
-**Bekannte Grenze – die Hauptzeit ist nicht überall bezahlbar.** Das Budget
-eines Tages folgt aus den Verträgen. Gemessen über alle zwölf Monate 2026:
+Zwei Dinge muss der Betrieb bestätigen:
 
-| Filiale | fehlende halbe Stunden in der Hauptzeit | wo |
-|---|---|---|
-| Schloss Arkaden | 23 im Jahr (höchstens 13 im Monat) | nur samstags, dritte Person |
-| Papenstieg | 34 im Jahr (höchstens 14 im Monat) | vor allem Mo |
+1. **Die Inhaberin** steht mit Namen „Chu tiem" und 169 h im Plan. Sie hat
+   keine Lohnabrechnung; ohne sie reichen die Verträge nicht, um 09:30–20:00 an
+   26 Tagen zu besetzen. Name und Stunden im Tab „Nhân viên" anpassen.
+2. **Geänderte Stunden:** Quynh Nhu Nguyen hatte 117 h (09/2025), dann
+   27 h/Woche, seit 02/2026 19,5 h/Woche. Hinterlegt ist der letzte Stand – für
+   einen älteren Monat vor dem Erzeugen umstellen.
 
-Grund: der Monat hat in Papenstieg 439 Vertragsstunden, und die reine
-Mindestbesetzung (Abdeckung + zweite Person in der Hauptzeit) kostet schon rund
-86 h je Woche von 101 h. Es bleibt also kaum Luft, und jede Rundung auf die
-halbe Stunde schlägt durch. Dasselbe passiert in einer **angebrochenen Woche am
-Monatsrand**. Der Bericht „Độ phủ" zeigt diese halben Stunden rot an.
+## Was der Plan leistet
 
-Die Abdeckung (mindestens eine Person, kein leeres Studio) gilt **immer** – sie
-ist im Planer zehnmal so teuer bewertet wie eine Lücke in der Hauptzeit.
+Gerechnet über alle 11 Monate mit Lohnabrechnung (05/2025–03/2026):
 
-Zwei Schritte im Planer holen hier das Meiste heraus (siehe
-`src/lib/weeklyScheduler.ts`):
+| | Ergebnis |
+|---|---|
+| Verträge | eingehalten, Abweichung höchstens eine halbe Stunde |
+| Arbeitsrecht (8 h, 6 Tage, Pausen, Raster) | keine Verstöße |
+| Laden unbesetzt | **eine halbe Stunde im ganzen Zeitraum** (03.05.2025, siehe unten) |
+| Hauptzeit unterbesetzt | 227 halbe Stunden, davon 147 allein im August 2025 |
 
-1. **Sockel vor Gewicht** (`minimumStaffHours`): jeder offene Tag bekommt zuerst
-   die Stunden, die seine Mindestbesetzung kostet – unabhängig vom Tagesgewicht.
-   Erst der Rest wird nach Mo 1,2 … Sa 2,0 verteilt. Ohne das bekam der Dienstag
-   zu wenig und der Freitag mehr, als er brauchte.
-2. **Stundentausch zwischen zwei Personen** (`tradeMinutes`): 30 Minuten bis zu
-   einer ganzen Schicht wandern an einem knappen Tag von A zu B und an einem
-   anderen Tag derselben Woche zurück – Wochen- und Monatssumme bleiben exakt.
-   Das löst den häufigsten Fall: der Tag hat genug Stunden, sie liegen nur bei
-   der falschen Person (ein 3-Stunden-Dienst, der um 18:30 endet, statt einer
-   längeren Schicht bis 19:00).
-3. **Fünf-Tage-Woche für alle** (`maxDaysPerWeek` in `sampleData.ts`): ohne diese
-   Grenze streut der Planer kleine Verträge als 3-Stunden-Dienste über alle
-   sechs Öffnungstage. Mit ihr werden die Dienste länger, liegen besser in der
-   Hauptzeit – und jede Person hat einen freien Tag zusätzlich zum Sonntag.
+Der August 2025 ist der Engpass: da hatte das Studio nur **drei Verträge**
+(Inhaberin, 70,2 h, 87,4 h). Die Stunden reichen gerade für die Abdeckung, aber
+nicht für zwei Personen in der Hauptzeit. Ab November 2025 (fünf Verträge) ist
+der Plan sauber, 01–03/2026 ohne jede Lücke.
 
-Zusammen sank die Zahl der roten halben Stunden in Papenstieg von 108 auf 34.
-
-**Was das Budget NICHT hergibt:** in Papenstieg liegen alle Tage nahe an der
-Mindestbesetzung, um 17 Uhr stehen an jedem Wochentag genau 2 Personen. Die
-starken Tage bekommen dort nur 1,16-mal so viele Stunden wie ein Dienstag
-(Arkaden: 1,55-mal, samstags knapp 5 Personen um 17 Uhr). Wer freitags und
-samstags in Papenstieg sichtbar mehr Personal will, braucht mehr
-Vertragsstunden – rund 2 h je Woche schließen auch die letzten roten Stellen.
+Die eine unbesetzte halbe Stunde am Samstag, 03.05.2025 (19:30–20:00), ist
+rechnerisch nicht zu vermeiden: an dem Tag sind nur zwei Personen da, die
+8-Stunden-Schicht braucht ihre Pause, und § 4 ArbZG lässt sie erst nach vier
+und spätestens nach sechs Stunden zu – in diesem Fenster ist die zweite Person
+schon gegangen.
 
 ## PDF
 
-Stundenzettel und Dienstplan werden als **Vektor-PDF** gezeichnet (jsPDF, Text
-und Linien) – kein html2canvas, kein Screenshot. Eine A4-Seite je Mitarbeiter,
-identisch auf jedem Gerät, wenige Kilobyte je Seite.
+Stundenzettel und Dienstplan werden als **Vektor-PDF** gezeichnet (jsPDF) –
+kein html2canvas. Eine A4-Seite je Mitarbeiter, deutsche Dezimalzahlen,
+vietnamesische Namen ohne Diakritika (Helvetica), ä/ö/ü/ß bleiben korrekt.
 
 ## Entwicklung
 
@@ -128,7 +102,6 @@ npm run test
 npm run build
 ```
 
-Persistenz über LocalStorage (Schlüssel je Filiale) und optional Supabase
-(`store_data`, eine Zeile je `store_id`), konfiguriert mit `VITE_SUPABASE_URL`
-und `VITE_SUPABASE_ANON_KEY`. `VITE_STORE_ID_PREFIX` (z. B. `test-`) lenkt lokal
-auf Testzeilen um. Die Passwortsperre im Client ersetzt keine Zugriffskontrolle.
+Persistenz über LocalStorage und optional Supabase (`store_data`, Zeile
+`jadeqa`), konfiguriert mit `VITE_SUPABASE_URL` und `VITE_SUPABASE_ANON_KEY`.
+Die Passwortsperre im Client ersetzt keine Zugriffskontrolle.

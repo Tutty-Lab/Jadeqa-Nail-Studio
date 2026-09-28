@@ -1,10 +1,10 @@
 // ============================================================================
-// Gesetzliche Feiertage in NIEDERSACHSEN – beide Studios liegen in Braunschweig
-// (38100). Bewegliche Feiertage über die Osterformel (Gauß).
+// Gesetzliche Feiertage in RHEINLAND-PFALZ – das Studio liegt in
+// Bobenheim-Roxheim (67240). Bewegliche Feiertage über die Osterformel (Gauß).
 //
-// Niedersachsen hat seit 2018 den Reformationstag (31.10.). KEIN Feiertag sind
-// Heilige Drei Könige (BW/BY/ST), Fronleichnam, Mariä Himmelfahrt,
-// Allerheiligen und Buß- und Bettag.
+// Rheinland-Pfalz hat Fronleichnam (Ostern + 60) und Allerheiligen (1.11.).
+// KEIN Feiertag sind Heilige Drei Könige (BW/BY/ST), Mariä Himmelfahrt (BY/SL),
+// Reformationstag (u. a. NI/SH) und Buß- und Bettag (SN).
 //
 // An diesen Tagen bleibt das Studio ZU (Ladenschluss) – siehe workHours.ts,
 // holidayClosed.
@@ -34,7 +34,7 @@ function iso(date: Date): string {
   return format(date, "yyyy-MM-dd");
 }
 
-/** Datum -> Name aller gesetzlichen Feiertage in Niedersachsen eines Jahres. */
+/** Datum -> Name aller gesetzlichen Feiertage in Rheinland-Pfalz eines Jahres. */
 export function publicHolidayNames(year: number): Map<string, string> {
   const easter = easterSunday(year);
   const map = new Map<string, string>();
@@ -44,15 +44,16 @@ export function publicHolidayNames(year: number): Map<string, string> {
   map.set(iso(new Date(year, 4, 1)), "Tag der Arbeit");
   map.set(iso(addDays(easter, 39)), "Christi Himmelfahrt");
   map.set(iso(addDays(easter, 50)), "Pfingstmontag");
+  map.set(iso(addDays(easter, 60)), "Fronleichnam");
   map.set(iso(new Date(year, 9, 3)), "Tag der Deutschen Einheit");
-  map.set(iso(new Date(year, 9, 31)), "Reformationstag"); // Niedersachsen, 31.10.
+  map.set(iso(new Date(year, 10, 1)), "Allerheiligen"); // Rheinland-Pfalz, 1.11.
   map.set(iso(new Date(year, 11, 25)), "1. Weihnachtstag");
   map.set(iso(new Date(year, 11, 26)), "2. Weihnachtstag");
   return map;
 }
 
 /**
- * Alle gesetzlichen Feiertage in Niedersachsen eines Jahres als ISO-Set
+ * Alle gesetzlichen Feiertage in Rheinland-Pfalz eines Jahres als ISO-Set
  * "yyyy-MM-dd". Leitet sich aus publicHolidayNames ab, damit Set und Namen
  * niemals auseinanderlaufen können.
  */

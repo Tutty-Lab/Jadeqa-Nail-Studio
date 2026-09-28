@@ -1,23 +1,21 @@
 // ============================================================================
-// Die zwei Studios dieses Betriebs. Umschalten passiert im Tab „Cài đặt" und in
-// der Kopfzeile; jedes Studio hat seine eigene Zeile in der gemeinsamen
-// Supabase-Tabelle (Schlüssel = id) und seinen eigenen LocalStorage-Schlüssel.
-//
-// Beide liegen in Braunschweig (Niedersachsen, gleiche Feiertage), haben aber
-// UNTERSCHIEDLICHE Öffnungszeiten, eigene Besetzungsregeln und eigene Teams.
+// Der Betrieb hat EIN Studio. Die Struktur mit einer Liste bleibt trotzdem –
+// so lässt sich später ein zweiter Laden anhängen, ohne die Oberfläche
+// umzubauen (jede Filiale hat eigene Zeile in Supabase, eigenen
+// LocalStorage-Schlüssel, eigene Belegschaft).
 // ============================================================================
 
 import type { Employee, Schedule } from "../types";
-import { arkadenEmployees, papenstiegEmployees } from "./sampleData";
+import { jadeqaEmployees } from "./sampleData";
 import { DAY_WEIGHTS, type WeekdayKey } from "./demand";
-import { ARKADEN_STAFFING_RULES, PAPENSTIEG_STAFFING_RULES, type StaffingRule } from "./staffing";
-import { ARKADEN_WORK_HOURS, PAPENSTIEG_WORK_HOURS, type WorkHoursConfig } from "./workHours";
+import { JADEQA_STAFFING_RULES, type StaffingRule } from "./staffing";
+import { JADEQA_WORK_HOURS, type WorkHoursConfig } from "./workHours";
 
 export type StoreConfig = {
   /** Schlüssel der Zeile in store_data – nach dem Anlegen NICHT mehr ändern. */
   id: string;
   name: string;
-  /** Kurzname für den Umschalter in der Kopfzeile. */
+  /** Kurzname für Überschriften. */
   shortName: string;
   address: string;
   /** Telefon des Studios (nur Anzeige/Dokumentation). */
@@ -34,26 +32,15 @@ export type StoreConfig = {
 
 export const STORES: StoreConfig[] = [
   {
-    id: "arkaden",
-    name: "King Nail Schloss Arkaden",
-    shortName: "Arkaden",
-    address: "Platz am Ritterbrunnen 1, 38100 Braunschweig",
-    phone: "0531 88532798",
-    workHours: ARKADEN_WORK_HOURS,
-    sampleEmployees: arkadenEmployees,
+    id: "jadeqa",
+    name: "J'ADEQA Nagelstudio",
+    shortName: "J'ADEQA",
+    address: "Südring 2, 67240 Bobenheim-Roxheim",
+    phone: "",
+    workHours: JADEQA_WORK_HOURS,
+    sampleEmployees: jadeqaEmployees,
     dayWeights: DAY_WEIGHTS,
-    staffingRules: ARKADEN_STAFFING_RULES,
-  },
-  {
-    id: "papenstieg",
-    name: "King Nail Papenstieg",
-    shortName: "Papenstieg",
-    address: "Papenstieg 8, 38100 Braunschweig",
-    phone: "+49 531 34967521",
-    workHours: PAPENSTIEG_WORK_HOURS,
-    sampleEmployees: papenstiegEmployees,
-    dayWeights: DAY_WEIGHTS,
-    staffingRules: PAPENSTIEG_STAFFING_RULES,
+    staffingRules: JADEQA_STAFFING_RULES,
   },
 ];
 
@@ -84,13 +71,17 @@ export function storeById(id: string): StoreConfig {
   return STORES.find((s) => s.id === id) ?? STORES[0];
 }
 
-/** Startstand eines Studios: September 2026 mit der Belegschaft aus der Angabe. */
+/**
+ * Startstand: März 2026 – der letzte Monat, für den Lohnabrechnungen
+ * vorliegen. Ältere Monate lassen sich oben in der Kopfzeile wählen; die App
+ * rechnet sie über Eintritt/Austritt richtig.
+ */
 export function initialScheduleFor(store: StoreConfig): Schedule {
   return {
     companyName: store.name,
     address: store.address,
     year: 2026,
-    month: 9,
+    month: 3,
     workHours: structuredClone(store.workHours),
     dateOverrides: [],
     employees: store.sampleEmployees(),

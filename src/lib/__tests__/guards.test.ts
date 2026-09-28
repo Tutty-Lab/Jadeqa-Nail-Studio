@@ -2,15 +2,15 @@
 // Unterbesetzung muss sichtbar werden statt still zu passieren – egal ob sie
 // vom Scheduler kommt oder von einer Änderung im Plan von Hand.
 //
-// Schloss Arkaden: offen 09:30–20:00, in der Hauptzeit 15:00–19:00 sollen
-// Mo–Fr mindestens 2 Leute da sein, samstags 11:00–19:00 mindestens 3 – und zu
-// jeder Öffnungsminute mindestens eine Person.
+// J'ADEQA: offen 09:30–20:00, in der Hauptzeit 15:00–19:00 sollen mindestens
+// 2 Leute da sein (samstags ab 11:00) – und zu jeder Öffnungsminute mindestens
+// eine Person.
 // ============================================================================
 
 import { describe, expect, it } from "vitest";
 import { analyzeSchedule } from "../analyze";
-import { ARKADEN_WORK_HOURS } from "../workHours";
-import { ARKADEN_STAFFING_RULES } from "../staffing";
+import { JADEQA_WORK_HOURS } from "../workHours";
+import { JADEQA_STAFFING_RULES } from "../staffing";
 import type { Employee, Shift } from "../../types";
 
 const emp = (id: string): Employee => ({
@@ -60,8 +60,8 @@ const spaet = (id: string, date = "2026-09-01"): Shift => ({
 
 const analyse = (employees: Employee[], shifts: Shift[], month = 9) =>
   analyzeSchedule({
-    year: 2026, month, workHours: ARKADEN_WORK_HOURS, employees, shifts,
-    rules: ARKADEN_STAFFING_RULES,
+    year: 2026, month, workHours: JADEQA_WORK_HOURS, employees, shifts,
+    rules: JADEQA_STAFFING_RULES,
   });
 
 describe("Zu wenige Leute in der Hauptzeit", () => {
@@ -114,12 +114,13 @@ describe("Zu wenige Leute in der Hauptzeit", () => {
     expect(hauptzeit.ok).toBe(false);
   });
 
-  it("samstags verlangt Arkaden drei Leute ab 11:00", () => {
+  it("samstags verlangt das Studio zwei Leute ab 11:00", () => {
     // 2026-09-05 ist ein Samstag.
-    const report = analyse([emp("a"), emp("b")], [frueh("a", "2026-09-05"), spaet("b", "2026-09-05")]);
+    // Nur EINE Person am Samstag: die Untergrenze von zwei ist verletzt.
+    const report = analyse([emp("a")], [frueh("a", "2026-09-05")]);
     const day = report.days.find((d) => d.date === "2026-09-05")!;
     const samstag = day.peaks.find((p) => p.label === "Cao điểm T7")!;
-    expect(samstag.required).toBe(3);
+    expect(samstag.required).toBe(2);
     expect(samstag.startMinutes).toBe(11 * 60);
     expect(samstag.ok).toBe(false);
   });

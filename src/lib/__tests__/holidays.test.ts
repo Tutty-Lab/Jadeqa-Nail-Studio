@@ -4,11 +4,11 @@ import { generateSchedule } from "../scheduler";
 import { validateSchedule } from "../validation";
 import { datesOfMonth } from "../demand";
 import { resolveDay } from "../workHours";
-import { ARKADEN_WORK_HOURS } from "../workHours";
+import { JADEQA_WORK_HOURS } from "../workHours";
 import { SAMPLE_EMPLOYEES } from "../sampleData";
 import { format } from "date-fns";
 
-describe("Feiertage (Niedersachsen)", () => {
+describe("Feiertage (Rheinland-Pfalz)", () => {
   it("berechnet Ostersonntag korrekt", () => {
     expect(format(easterSunday(2026), "yyyy-MM-dd")).toBe("2026-04-05");
     expect(format(easterSunday(2024), "yyyy-MM-dd")).toBe("2024-03-31");
@@ -23,18 +23,18 @@ describe("Feiertage (Niedersachsen)", () => {
     expect(h.has("2026-05-14")).toBe(true); // Christi Himmelfahrt
     expect(h.has("2026-05-25")).toBe(true); // Pfingstmontag
     expect(h.has("2026-10-03")).toBe(true); // Deutsche Einheit
-    expect(h.has("2026-10-31")).toBe(true); // Reformationstag (Niedersachsen)
+    expect(h.has("2026-06-04")).toBe(true); // Fronleichnam (Ostern + 60)
+    expect(h.has("2026-11-01")).toBe(true); // Allerheiligen
     expect(h.has("2026-12-25")).toBe(true);
     expect(h.has("2026-12-26")).toBe(true);
-    expect(h.size).toBe(10);
+    expect(h.size).toBe(11);
   });
 
   it("enthält KEINE Feiertage anderer Bundesländer", () => {
     const h = publicHolidays(2026);
     expect(h.has("2026-01-06")).toBe(false); // Heilige Drei Könige – BW/BY/ST
-    expect(h.has("2026-06-04")).toBe(false); // Fronleichnam – nicht in Niedersachsen
+    expect(h.has("2026-10-31")).toBe(false); // Reformationstag – nicht in Rheinland-Pfalz
     expect(h.has("2026-08-15")).toBe(false); // Mariä Himmelfahrt – BY/SL
-    expect(h.has("2026-11-01")).toBe(false); // Allerheiligen – nicht in Niedersachsen
     expect(h.has("2026-11-18")).toBe(false); // Buß- und Bettag – nur Sachsen
     expect(h.has("2026-04-05")).toBe(false); // Ostersonntag – nur Brandenburg
   });
@@ -49,12 +49,12 @@ describe("Feiertage (Niedersachsen)", () => {
 describe("Scheduler mit Feiertagen (Dezember 2026)", () => {
   const holidays = publicHolidays(2026);
   const openDates = datesOfMonth(2026, 12).filter(
-    (d) => !resolveDay(ARKADEN_WORK_HOURS, d, holidays, {}).closed,
+    (d) => !resolveDay(JADEQA_WORK_HOURS, d, holidays, {}).closed,
   );
   const shifts = generateSchedule({
     year: 2026,
     month: 12, // enthält 1. und 2. Weihnachtstag
-    workHours: ARKADEN_WORK_HOURS,
+    workHours: JADEQA_WORK_HOURS,
     employees: SAMPLE_EMPLOYEES,
   });
 

@@ -185,10 +185,10 @@ export function DocsTab({ stores }: { stores: StoreConfig[] }) {
           ))}
         </ul>
         <p className="mt-2 text-sm text-slate-300">
-Cả {stores.length} cơ sở dùng chung <b>luật giờ làm</b> và chung <b>hệ số ngày</b>. Khác nhau: <b>giờ mở
-          cửa</b> (mục 1) và số người mỗi khung (mục 3), vì quy mô hai tiệm khác nhau. Mọi tab đều hiện tất cả
-          các cơ sở (không có nút chuyển tiệm); tháng/năm chọn chung ở thanh trên cùng, và Bảng chấm công xuất
-          <b>một file PDF</b> gồm trang của mọi cơ sở.
+Tiệm nail mở <b>liên tục cả ngày</b>, chủ luôn có mặt, và nhân sự thay đổi theo thời gian — vì vậy mỗi
+          người có <b>ngày vào làm</b> và <b>ngày thôi làm</b> (tab Nhân viên). Chọn tháng nào ở thanh trên
+          cùng thì app chỉ xếp những người đang làm trong tháng đó, và định mức của người vào/nghỉ giữa tháng
+          được <b>chia theo tỉ lệ ngày</b> — giống hệt cách bảng lương tính (vào ngày 15 thì tháng đó nửa lương).
         </p>
         <p className="mt-2 text-sm text-slate-300">
           Mô tả đúng thuật toán đang chạy: bảng khung giờ, hệ số và đường nhu cầu lấy thẳng từ code – đổi code
@@ -200,14 +200,15 @@ Cả {stores.length} cơ sở dùng chung <b>luật giờ làm</b> và chung <b>
       <Section title="1. Điều kiện bắt buộc">
         <ul className="list-disc space-y-1 pl-5">
           <li>
-            <b>Giờ mở (mỗi cơ sở một khác, mở liên tục cả ngày):</b>
+            <b>Giờ mở (liên tục cả ngày, không nghỉ trưa):</b>
             <ul className="mt-1 list-[circle] space-y-0.5 pl-5">
               {stores.map((store) => (
-                <li key={store.id}>{store.shortName}: {openingText(store)}</li>
+                <li key={store.id}>{openingText(store)}</li>
               ))}
             </ul>
-            Chủ nhật và <b>ngày lễ</b> đóng cửa (muốn mở thì đặt „giờ riêng" ở Cài đặt).
+            Chủ nhật và <b>ngày lễ Rheinland-Pfalz</b> đóng cửa (muốn mở thì đặt „giờ riêng" ở Cài đặt).
           </li>
+          <li><b>Ngày vào làm / ngày thôi làm:</b> trước ngày vào và sau ngày thôi làm app không xếp ca. Định mức tháng đó chia theo số ngày thực làm; không có ngày thôi làm = vẫn đang làm.</li>
           <li><b>Luật giờ làm:</b> tối đa <b>8 giờ công/ngày</b> (mức tiệm tự đặt, thấp hơn luật 10h); tối đa <b>6 ngày liên tiếp</b>. Trên 6h công nghỉ <b>30′</b>, trên 8h nghỉ <b>60′</b> – giờ nghỉ có mốc cụ thể, bắt đầu sau ít nhất 1h vào ca.</li>
           <li><b>Hợp đồng là giới hạn cứng:</b> các tiệm ký theo <b>giờ mỗi tháng</b> (xem tab Nhân viên). Không ai bị xếp vượt hợp đồng; thiếu thì báo cảnh báo vàng.</li>
           {doubleJobs.length > 0 && (
@@ -223,13 +224,13 @@ Cả {stores.length} cơ sở dùng chung <b>luật giờ làm</b> và chung <b>
             <li><b>{duty?.store.shortName}: ngày lễ phải có {holidayDuty.name} trong ca</b> — bật ở tab Nhân viên (ô „Trực ngày lễ"), thuật toán giữ chỗ cho người đó trước rồi mới chia phần còn lại. Tiệm còn lại không có yêu cầu này.</li>
           )}
           <li><b>Ngày làm {SHIFT_LENGTHS[0]}–{SHIFT_LENGTHS[SHIFT_LENGTHS.length - 1]} giờ công.</b> Tiệm mở liên tục nên mỗi ngày mỗi người chỉ một ca liền mạch; ca không bao giờ dưới 3 giờ.</li>
-          <li><b>Người làm nhiều giờ có lịch ổn định:</b> ba bạn 150/150/130h ở Arkaden và bạn 160h ở Papenstieg được đặt <b>tối đa 5 ngày/tuần</b>. Vì hệ số ngày lặp lại giống nhau mỗi tuần nên khung giờ của họ cũng lặp lại; phần còn lại mới dùng người ít giờ để bù cao điểm.</li>
+          <li><b>Tối đa 5 ngày/tuần</b> cho nhân viên (ai cũng có thêm một ngày nghỉ ngoài Chủ nhật). Riêng <b>chủ tiệm</b> không giới hạn, vì 169h/tháng không nằm vừa 5 ngày/tuần trong tháng ngắn.</li>
         </ul>
       </Section>
 
       <Section title="2. Hệ số ngày và giờ công mỗi ngày">
         <p>
-Chủ tiệm cho: <b>T2 1,2 · T3 1,0 · T4 1,2 · T5 1,2 · T6 2,0 · T7 2,0</b> — Thứ Sáu và Thứ Bảy đông nhất,
+Hệ số ngày: <b>T2 1,2 · T3 1,0 · T4 1,2 · T5 1,2 · T6 2,0 · T7 2,0</b> — Thứ Sáu và Thứ Bảy đông nhất,
           Thứ Ba vắng nhất, Chủ nhật nghỉ. Giờ công mỗi ngày chia theo hệ số, chuẩn hoá trong từng ISO-week:
         </p>
         <pre className="overflow-x-auto rounded bg-slate-100 p-3 text-xs text-slate-800">{`Giờ công ngày = giờ công cả tuần × (hệ số ngày × giờ mở cửa)
@@ -246,13 +247,12 @@ Chủ tiệm cho: <b>T2 1,2 · T3 1,0 · T4 1,2 · T5 1,2 · T6 2,0 · T7 2,0</b
 
       <Section title="3. Khung giờ và mục tiêu nhân sự">
         <p>
-Mỗi khung có <b>số người tối thiểu và tối đa</b>. Thiếu hoặc vượt bị phạt nặng nhất trong thuật toán và
-          hiện đỏ trong báo cáo Độ phủ. Yêu cầu của chủ tiệm: <b>phủ kín giờ mở cửa</b> và <b>đông người vào
-          cao điểm</b> ({minutesToTime(PEAK_START)}–{minutesToTime(PEAK_END)}, riêng T7 từ {minutesToTime(SATURDAY_PEAK_START)}).
-          Các mốc dưới đây là YÊU CẦU, không phải lúc nào cũng đủ giờ hợp đồng để trả: Papenstieg chỉ có
-          439h/tháng, thứ Ba ngân sách ~12,3h trong khi phủ kín 09:00–19:00 đã hết 10h và người thứ hai
-          15:00–19:00 thêm 4h. Những lúc không đủ, app để thiếu người ở cao điểm chứ <b>không bao giờ để tiệm
-          trống</b>, và báo cáo Độ phủ hiện đỏ chỗ đó.
+Mỗi khung có <b>số người tối thiểu và tối đa</b>. Yêu cầu của chủ tiệm: <b>phủ kín giờ mở cửa</b> và
+          <b>đông người vào cao điểm</b> ({minutesToTime(PEAK_START)}–{minutesToTime(PEAK_END)}, riêng T7 từ {minutesToTime(SATURDAY_PEAK_START)}).
+          Mốc 2 người là YÊU CẦU, không phải lúc nào cũng đủ giờ hợp đồng để trả: tháng nào tiệm chỉ còn ba
+          hợp đồng thì tổng giờ vừa đủ để phủ cửa, không đủ cho người thứ hai suốt cao điểm. Những lúc ấy app
+          để thiếu người ở cao điểm chứ <b>ưu tiên không để tiệm trống</b> (phạt gấp 10), và báo cáo Độ phủ
+          hiện đỏ chỗ đó.
         </p>
         <div className="space-y-4">
           {stores.map((store) => (
@@ -312,7 +312,7 @@ Giờ nghỉ là khoảng thời gian cụ thể trong ca: trên 6 giờ công n
 
       <Section title="7. Ngày đặc biệt và kiểm tra">
         <ul className="list-disc space-y-1 pl-5">
-          <li>Ngày lễ theo <b>Niedersachsen</b> (cả hai cơ sở ở Braunschweig): 10 ngày, có Reformationstag 31.10.; không có Heilige Drei Könige, Fronleichnam, Allerheiligen. <b>Ngày lễ tiệm đóng cửa</b>, không xếp ai.</li>
+          <li>Ngày lễ theo <b>Rheinland-Pfalz</b> (Bobenheim-Roxheim): 11 ngày, có Fronleichnam và Allerheiligen 1.11.; không có Reformationstag. <b>Ngày lễ tiệm đóng cửa</b>, không xếp ai.</li>
           <li>Ngày đặc biệt (override) có thể đóng cả ngày hoặc đặt khung giờ riêng; bấm <b>Tạo lịch</b> lại sau khi thêm.</li>
           <li>Sửa tay một ca vẫn phải giữ hợp đồng, tối đa 8 giờ/ngày, 6 ngày liên tiếp, khung ca và giờ nghỉ – ca sửa tay được đánh dấu <b>Đã sửa tay</b>.</li>
           <li>Báo cáo Độ phủ ghi <b>số người thực tế / yêu cầu</b> từng 30′; thiếu hoặc vượt khung hiện viền đỏ.</li>

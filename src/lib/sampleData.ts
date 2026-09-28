@@ -1,12 +1,32 @@
 // ============================================================================
-// Startbelegschaft beider Studios. Beide rechnen in MONATSstunden (nicht je Woche).
+// Startbelegschaft des Studios, abgelesen aus den Lohnabrechnungen (DATEV).
 //
-// Schloss Arkaden: 58, 150, 130, 72, 55, 43 und 150 Stunden (zusammen 658 h).
-// Papenstieg: 160, 64, 86, 43 und 86 Stunden (zusammen 439 h).
+// Umrechnung Lohn -> Stunden, wenn auf der Abrechnung KEINE Wochenstundenzahl
+// steht: Brutto ÷ Mindestlohn. 2025 = 12,82 EUR, 2026 = 13,90 EUR.
+// Steht „Wöch.Arb.Zt." auf der Abrechnung, gilt DIESE Zahl (sie ist die
+// vertraglich vereinbarte, nicht gerechnet).
+//
+//   Thi Kim Oanh Pham   Eintritt 01.11.2024              900 EUR  -> 70,2 h/Monat
+//   Tri Duc Nguyen      Eintritt 01.05.2025            1.120 EUR  -> 87,4 h/Monat
+//   Dinh Hai Le         15.05.2025 bis 31.07.2025      1.200 EUR  -> 93,6 h/Monat
+//                       (Mai nur 680 EUR = halber Monat -> das rechnet die App
+//                        aus dem Eintrittsdatum selbst aus)
+//   Quynh Nhu Nguyen    Eintritt 01.09.2025            Wöch.Arb.Zt. 19,50 h
+//   Van Anh Nguyen      Eintritt 01.11.2025            Wöch.Arb.Zt. 5,00 h
+//   Thuy Linh Tran      Eintritt 15.01.2026            Wöch.Arb.Zt. 19,50 h
+//
+// ACHTUNG, zwei Annahmen, die der Betrieb bestätigen muss:
+//  1. Die INHABERIN steht als „Chu tiem" mit 169 h im Plan – sie ist laut
+//     Angabe immer im Laden, hat aber keine Lohnabrechnung. Name und Stunden
+//     im Tab „Nhân viên" anpassen.
+//  2. Wer seine Stunden im Lauf der Zeit geändert hat, steht mit dem ZULETZT
+//     belegten Wert hier (Quynh Nhu Nguyen: 117 h im September 2025, dann
+//     27 h/Woche, seit Februar 2026 19,5 h/Woche). Für einen älteren Monat die
+//     Stundenzahl vor dem Erzeugen des Plans umstellen.
 // ============================================================================
 
 import type { Employee, Schedule } from "../types";
-import { ARKADEN_WORK_HOURS } from "./workHours";
+import { JADEQA_WORK_HOURS } from "./workHours";
 
 export function makeEmployee(
   id: string,
@@ -17,7 +37,7 @@ export function makeEmployee(
   return { id, name, employmentType, targetMinutes: Math.round(targetHours * 60) };
 }
 
-/** Mitarbeiter mit WOCHENvertrag (hier nicht im Einsatz, bleibt für die Oberfläche). */
+/** Mitarbeiter mit WOCHENvertrag – auf der Abrechnung als „Wöch.Arb.Zt.". */
 export function makeWeekly(
   id: string,
   name: string,
@@ -28,63 +48,74 @@ export function makeWeekly(
 }
 
 /**
- * Cơ sở 1 – King Nail Schloss Arkaden, Platz am Ritterbrunnen 1, 38100 Braunschweig.
+ * J'ADEQA Nagelstudio, Südring 2, 67240 Bobenheim-Roxheim.
  *
- * ANNAHME zur Anstellungsart (der Betrieb nennt nur Stunden): ab 130 h
- * Vollzeit, 55–86 h Teilzeit, 43 h Minijob – das ändert nur die Beschriftung
- * auf dem Stundenzettel, nicht die Planung.
+ * Jede Person hat Eintritt (und, wo bekannt, Austritt). Dadurch plant die App
+ * einen beliebigen Monat richtig: wer damals noch nicht da war oder schon
+ * gegangen ist, taucht nicht auf, und das Monats-Soll wird anteilig gerechnet.
  *
- * JEDE Person arbeitet höchstens FÜNF Tage je Woche (maxDaysPerWeek).
- *  - Vollzeit (150/150/130 h): weil die Tagesgewichte jede Woche gleich sind,
- *    wiederholt sich ihr Rhythmus dadurch von Woche zu Woche – „lịch cố định"
- *    wie gewünscht – und es bleiben Tage frei für die Teilzeitkräfte.
- *  - Teilzeit/Minijob: ohne die Grenze streut der Planer die wenigen Stunden
- *    über ALLE sechs Öffnungstage (3-Stunden-Dienste an 25 von 25 Tagen). Mit
- *    der Grenze werden die Dienste länger und liegen besser in der Hauptzeit;
- *    in Papenstieg sinken die unterbesetzten halben Stunden dadurch von 57 auf
- *    34 im Jahr. Wer doch sechs Tage arbeiten soll, wird im Tab „Nhân viên"
- *    umgestellt.
+ * Anstellungsart aus den Stunden abgeleitet (nur Beschriftung des
+ * Stundenzettels): ab 130 h Vollzeit, 60–130 h Teilzeit, darunter Minijob.
+ * Alle höchstens fünf Tage je Woche, damit jede Person einen freien Tag neben
+ * dem Sonntag hat.
  */
-export function arkadenEmployees(): Employee[] {
+export function jadeqaEmployees(): Employee[] {
   return [
-    { ...makeEmployee("arkaden-1", "Nguyen Xuan Manh", "VOLLZEIT", 150), maxDaysPerWeek: 5 },
-    { ...makeEmployee("arkaden-2", "Pham Van Nha", "VOLLZEIT", 150), maxDaysPerWeek: 5 },
-    { ...makeEmployee("arkaden-3", "Nguyen Quang Huy", "VOLLZEIT", 130), maxDaysPerWeek: 5 },
-    { ...makeEmployee("arkaden-4", "Nguyen Thi Thu Hang", "TEILZEIT", 72), maxDaysPerWeek: 5 },
-    { ...makeEmployee("arkaden-5", "Do Thuy Hang", "TEILZEIT", 58), maxDaysPerWeek: 5 },
-    { ...makeEmployee("arkaden-6", "Nguyen Thi Khanh Huyen", "TEILZEIT", 55), maxDaysPerWeek: 5 },
-    { ...makeEmployee("arkaden-7", "Dinh Thi Duyen", "MINIJOB", 43), maxDaysPerWeek: 5 },
+    {
+      // ANNAHME: Inhaberin, immer im Laden. Ohne sie reichen die Verträge nicht,
+      // um 09:30–20:00 an 26 Tagen zu besetzen.
+      //
+      // Als EINZIGE ohne Fünf-Tage-Grenze: 169 h passen in einem kurzen Monat
+      // (Februar, 24 offene Tage) sonst nicht in fünf Tage je Woche – 20 Tage
+      // mal höchstens 8 h sind nur 160 h. Sie ist ohnehin jeden Tag im Laden.
+      ...makeEmployee("jadeqa-0", "Chu tiem", "VOLLZEIT", 169),
+    },
+    {
+      ...makeEmployee("jadeqa-1", "Thi Kim Oanh Pham", "TEILZEIT", 70.2),
+      startDate: "2024-11-01",
+      maxDaysPerWeek: 5,
+    },
+    {
+      ...makeEmployee("jadeqa-2", "Tri Duc Nguyen", "TEILZEIT", 87.4),
+      startDate: "2025-05-01",
+      maxDaysPerWeek: 5,
+    },
+    {
+      ...makeEmployee("jadeqa-3", "Dinh Hai Le", "TEILZEIT", 93.6),
+      startDate: "2025-05-15",
+      endDate: "2025-07-31",
+      maxDaysPerWeek: 5,
+    },
+    {
+      ...makeWeekly("jadeqa-4", "Quynh Nhu Nguyen", "TEILZEIT", 19.5),
+      startDate: "2025-09-01",
+      maxDaysPerWeek: 5,
+    },
+    {
+      ...makeWeekly("jadeqa-5", "Van Anh Nguyen", "MINIJOB", 5),
+      startDate: "2025-11-01",
+      maxDaysPerWeek: 5,
+    },
+    {
+      ...makeWeekly("jadeqa-6", "Thuy Linh Tran", "TEILZEIT", 19.5),
+      startDate: "2026-01-15",
+      maxDaysPerWeek: 5,
+    },
   ];
 }
 
-/**
- * Cơ sở 2 – King Nail Papenstieg, Papenstieg 8, 38100 Braunschweig.
- *
- * Gleiche Annahme zur Anstellungsart, gleiche Grenze von fünf Arbeitstagen je
- * Woche. Pham Duy Thang (160 h) ist die feste Vollzeitkraft des Ladens.
- */
-export function papenstiegEmployees(): Employee[] {
-  return [
-    { ...makeEmployee("papen-1", "Pham Duy Thang", "VOLLZEIT", 160), maxDaysPerWeek: 5 },
-    { ...makeEmployee("papen-2", "Bui Thi Huyen", "TEILZEIT", 86), maxDaysPerWeek: 5 },
-    { ...makeEmployee("papen-3", "Nguyen Trong Hanh", "TEILZEIT", 86), maxDaysPerWeek: 5 },
-    { ...makeEmployee("papen-4", "Nguyen Tien Long", "TEILZEIT", 64), maxDaysPerWeek: 5 },
-    { ...makeEmployee("papen-5", "Tang Thi Nhung", "MINIJOB", 43), maxDaysPerWeek: 5 },
-  ];
-}
-
-/** Belegschaft der Standard-Filiale – für Tests und Altaufrufe. */
-export const SAMPLE_EMPLOYEES: Employee[] = arkadenEmployees();
+/** Belegschaft für Tests und Altaufrufe. */
+export const SAMPLE_EMPLOYEES: Employee[] = jadeqaEmployees();
 
 export function createSampleSchedule(): Schedule {
   return {
-    companyName: "King Nail Schloss Arkaden",
-    address: "Platz am Ritterbrunnen 1, 38100 Braunschweig",
+    companyName: "J'ADEQA Nagelstudio",
+    address: "Südring 2, 67240 Bobenheim-Roxheim",
     year: 2026,
-    month: 9,
-    workHours: structuredClone(ARKADEN_WORK_HOURS),
+    month: 3,
+    workHours: structuredClone(JADEQA_WORK_HOURS),
     dateOverrides: [],
-    employees: arkadenEmployees(),
+    employees: jadeqaEmployees(),
     shifts: [],
   };
 }

@@ -1,8 +1,8 @@
 import type { Employee, Shift } from "../types";
 import { DAY_WEIGHTS, datesOfMonth, parseIsoDate, weekdayKeyOf, type WeekdayKey } from "./demand";
-import { weeklyBudgetMinutes, weeklyTargetMinutes } from "./contract";
+import { monthlyTargetMinutesFor, weeklyBudgetMinutes, weeklyTargetMinutes } from "./contract";
 import { calculatePause } from "./time";
-import { mayWorkOn } from "./availability";
+import { isEmployedOn, mayWorkOn } from "./availability";
 import { consecutiveRunLengthWith } from "./consecutive";
 import { effectiveWeekdayKey, resolveDay, type DayBlocks, type DayWindow, type OverrideMap, type WorkHoursConfig } from "./workHours";
 import { publicHolidays } from "./holidays";
@@ -247,13 +247,19 @@ function dayCost(shifts: Shift[], blocks: DayBlocks, weekday: WeekdayKey, target
     return staff;
   });
   let cost = 0;
+  const mussBesetzt = new Set<number>();
   for (const window of model.windows) {
     for (let k = 0; k < window.slots.length; k++) {
       const staff = counts[window.slots[k]];
       cost += (Math.max(0, window.minStaff - staff) + Math.max(0, staff - window.maxStaff)) * window.overlap[k] * 500;
-      if (staff === 0 && window.minStaff > 0) cost += window.overlap[k] * 4500;
+      if (window.minStaff > 0) mussBesetzt.add(window.slots[k]);
     }
   }
+  // Leerstand zählt EINMAL je halber Stunde, nicht je Fenster. Sonst wäre ein
+  // Loch um 13:30 (Öffnungszeit UND Hauptzeit) doppelt so teuer wie eines um
+  // 09:30 (nur Öffnungszeit), und der Planer schiebt das Loch lieber auf den
+  // Ladenschluss- oder Öffnungsrand. Leer ist leer.
+  for (const slot of mussBesetzt) if (counts[slot] === 0) cost += SLOT * 4500;
   for (let i = 0; i < counts.length; i++) cost += (counts[i] - model.targets[i]) ** 2 * SLOT_DEVIATION_COST;
   const paidHours = shifts.reduce((sum, shift) => sum + shift.paidMinutes, 0) / 60;
   cost += (paidHours - (targetHours ?? 0)) ** 2 * 1500;
@@ -562,6 +568,36 @@ function tradeMinutes(
       void weekStart;
       for (const needy of weekDates) {
         if (!understaffed(current, needy)) continue;
+        // Zuerst der einfache Fall: EINE Person holt Zeit von einem anderen Tag
+        // derselben Woche auf den knappen Tag. Das ist der einzige Schritt, der
+        // die STUNDENSUMME eines Tages ändert – der Tausch unten verschiebt nur
+        // zwischen Personen. Ohne ihn bleibt ein Tag mit 10,0 h für 10,5 h
+        // Öffnungszeit unterbesetzt, egal wie man die Dienste legt.
+        for (const person of movable) {
+          const aufTag = paidOf(current, person.id, needy);
+          if (!aufTag) continue;
+          for (const quelle of weekDates) {
+            if (quelle === needy) continue;
+            const abgeben = paidOf(current, person.id, quelle);
+            if (!abgeben) continue;
+            for (const menge of tradeAmounts(abgeben, aufTag + MAX_PAID)) {
+              if (aufTag + menge > MAX_PAID) break;
+              const rest = current.filter(
+                (s) => !(s.employeeId === person.id && (s.date === needy || s.date === quelle)),
+              );
+              const vorher = costOf(current, needy) + costOf(current, quelle);
+              const mehr = placePair(needy, person, aufTag + menge, person, 0, rest.filter((s) => s.date === needy));
+              const weniger = placePair(quelle, person, abgeben - menge, person, 0, rest.filter((s) => s.date === quelle));
+              if (!mehr || !weniger) continue;
+              const nachher = [...rest, ...mehr, ...weniger];
+              if (costOf(nachher, needy) + costOf(nachher, quelle) < vorher - 0.01) {
+                current = nachher;
+                changed = true;
+                break;
+              }
+            }
+          }
+        }
         for (const giver of movable) {
           for (const taker of movable) {
             if (giver === taker) continue;
@@ -626,6 +662,47 @@ function tradeMinutes(
  *     pauses chosen only by the demand curve all landed on the same hour
  *     (Sunday: 4 people 14–15 h, 5 people 15–16 h → dip, then a jump at 16 h).
  */
+/** Minuten der Öffnungszeit, in denen NIEMAND im Laden ist. */
+function leerMinuten(shifts: Shift[], blocks: DayBlocks): number {
+  let leer = 0;
+  for (const block of blocks) {
+    for (let minute = block.startMinutes; minute < block.endMinutes; minute += SLOT) {
+      if (!shifts.some((shift) => workingAt(shift, minute))) leer += SLOT;
+    }
+  }
+  return leer;
+}
+
+/**
+ * Tageskosten, nachdem jede Pause einmal auf ihren besten Platz geschoben
+ * wurde. Nur zum BEWERTEN einer Schichtlage – die Pausen selbst rückt der
+ * eigene Durchgang weiter unten.
+ */
+function costWithBestPauses(
+  shifts: Shift[],
+  blocks: DayBlocks,
+  weekday: WeekdayKey,
+  target: number | undefined,
+  ctx: Ctx,
+): number {
+  let aktuell = shifts;
+  for (let i = 0; i < aktuell.length; i++) {
+    const shift = aktuell[i];
+    if (shift.pauseMinutes <= 0) continue;
+    const others = aktuell.filter((_, k) => k !== i);
+    let bestCost = dayCost(aktuell, blocks, weekday, target, ctx);
+    let best: Shift | undefined;
+    for (const start of pauseStartCandidates(shift.startMinutes, shift.endMinutes, shift.pauseMinutes)) {
+      if (start === shift.pauseStartMinutes) continue;
+      const moved = { ...shift, pauseStartMinutes: start };
+      const cost = dayCost([...others, moved], blocks, weekday, target, ctx);
+      if (cost < bestCost - 1e-9) { best = moved; bestCost = cost; }
+    }
+    if (best) aktuell = aktuell.map((s, k) => (k === i ? best! : s));
+  }
+  return dayCost(aktuell, blocks, weekday, target, ctx);
+}
+
 function improveCoverage(result: Shift[], employees: Employee[], days: Map<string, Day>, holidays: Set<string>, dailyTargets: Map<string, number>, ctx: Ctx): Shift[] {
   const output: Shift[] = [];
   for (const [date, day] of days) {
@@ -641,10 +718,20 @@ function improveCoverage(result: Shift[], employees: Employee[], days: Map<strin
         if (own.length === 0) continue;
         const paid = own.reduce((sum, shift) => sum + shift.paidMinutes, 0);
         const others = onDay.filter((shift) => shift.employeeId !== employee.id);
-        let bestCost = dayCost(onDay, day.blocks, weekday, target, ctx);
+        // Steht der Laden zeitweise leer, muss die Lage der Schicht ZUSAMMEN
+        // mit den Pausen der anderen bewertet werden: eine Person früher
+        // anfangen zu lassen hilft nur, wenn die Pause der zweiten Person
+        // gleichzeitig dorthin rutscht, wo die erste noch da ist. Nacheinander
+        // betrachtet ist jeder Schritt für sich wertlos, und der Planer bleibt
+        // auf dem Loch sitzen.
+        const preis = (shifts: Shift[]): number =>
+          leerMinuten(shifts, day.blocks) > 0
+            ? costWithBestPauses(shifts, day.blocks, weekday, target, ctx)
+            : dayCost(shifts, day.blocks, weekday, target, ctx);
+        let bestCost = preis(onDay);
         let best: Shift[] | undefined;
         for (const option of optionsFor(employee, date, paid, day.blocks, partialWeek, weekday, ctx)) {
-          const cost = dayCost([...others, ...option.shifts], day.blocks, weekday, target, ctx);
+          const cost = preis([...others, ...option.shifts]);
           if (cost < bestCost - 1e-9) { best = option.shifts; bestCost = cost; }
         }
         if (best) { onDay = [...others, ...best]; changed = true; }
@@ -730,11 +817,10 @@ export function generateWeeklySchedule(input: WeeklyInput, existing: Shift[] = [
     if (employee.weeklyHours != null) return [employee.id, weeklyBudgetMinutes(employee, openDates, monthBounds, input.workHours)] as const;
     const empWeekInfo = weekInfo.map((week) => ({
       weekStart: week.weekStart,
-      openDays: (byWeek.get(week.weekStart) ?? []).filter(
-        (date) => employee.startDate == null || date >= employee.startDate,
-      ).length,
+      openDays: (byWeek.get(week.weekStart) ?? []).filter((date) => isEmployedOn(employee, date)).length,
     }));
-    return [employee.id, weeklyTargetMinutes(employee.targetMinutes, empWeekInfo)] as const;
+    // Anteiliges Monats-Soll, wenn Eintritt oder Austritt in den Monat fallen.
+    return [employee.id, weeklyTargetMinutes(monthlyTargetMinutesFor(employee, openDates, input.workHours), empWeekInfo)] as const;
   }));
   // Ein Wochenbudget unter der Mindestschichtlänge (Monatsrand: ein oder zwei
   // offene Tage) ergäbe einen 1–2-Stunden-Dienst. Bei einem MONATSvertrag darf
@@ -771,6 +857,10 @@ export function generateWeeklySchedule(input: WeeklyInput, existing: Shift[] = [
       ctx.weights,
       // Sàn: giờ công tối thiểu để phủ cửa VÀ đủ người các khung cao điểm.
       (date) => minimumStaffHours(days.get(date)!.blocks, effectiveWeekdayKey(date, holidays), ctx.rules),
+      // Reicht das nicht: wenigstens eine Person über die ganze Öffnungszeit,
+      // plus eine halbe Stunde, damit die Pause einer langen Schicht nicht als
+      // Loch übrig bleibt (zwei Dienste müssen sich dort überlappen können).
+      (date) => openMinutesOfBlocks(days.get(date)!.blocks) / 60 + 0.5,
     );
     for (const [date, hours] of targets) dailyTargets.set(date, hours);
   };
@@ -816,7 +906,7 @@ export function generateWeeklySchedule(input: WeeklyInput, existing: Shift[] = [
       employee.id,
       employee.weeklyHours != null
         ? [...(budgets.get(employee.id)?.values() ?? [])].reduce((sum, minutes) => sum + minutes, 0)
-        : employee.targetMinutes,
+        : monthlyTargetMinutesFor(employee, openDates, input.workHours),
     ] as const),
   );
   // Ein WOCHENvertrag ist eine harte Grenze je Woche; ein Monatsvertrag nicht.

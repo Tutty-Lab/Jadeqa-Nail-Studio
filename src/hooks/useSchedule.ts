@@ -25,6 +25,7 @@ import { publicHolidays } from "../lib/holidays";
 import { initialScheduleFor, storeById, type StoreConfig } from "../lib/stores";
 import { contractOpenDays } from "../lib/contract";
 import { weekStartOf } from "../lib/weeks";
+import { isEmployedOn } from "../lib/availability";
 
 /**
  * Steht in diesem Stand überhaupt etwas? Maßstab sind Mitarbeiter und
@@ -184,6 +185,17 @@ export function useSchedule(storeId: string) {
     for (const date of openDates) byWeek.set(weekStartOf(date), (byWeek.get(weekStartOf(date)) ?? 0) + 1);
     return contractOpenDays([...byWeek.values()]);
   }, [openDates]);
+
+  /**
+   * Wer in diesem Monat überhaupt beschäftigt war (Eintritt/Austritt). Im
+   * Nagelstudio wechselt das Team, und wer im Mai gegangen ist, braucht für
+   * den September weder eine Zeile im Plan noch eine leere Seite im
+   * Stundenzettel. Im Tab „Nhân viên" bleiben trotzdem alle sichtbar.
+   */
+  const activeEmployees = useMemo(
+    () => schedule.employees.filter((employee) => openDates.some((date) => isEmployedOn(employee, date))),
+    [schedule.employees, openDates],
+  );
 
   const validation: ValidationResult = useMemo(
     () => validateSchedule(schedule.employees, schedule.shifts, schedule.year, openDates, schedule.workHours),
@@ -499,6 +511,7 @@ export function useSchedule(storeId: string) {
     analysis,
     openDays,
     openDates,
+    activeEmployees,
     isLocked,
     markWeekPrinted,
     unlockMonth,

@@ -35,12 +35,11 @@ function MainApp({ onLogout }: { onLogout: () => void }) {
   // Beide Filialen laufen gleichzeitig – jede mit eigenem State, eigener
   // Persistenz und eigener Sync. Angezeigt werden sie untereinander; es gibt
   // bewusst KEIN Umschalten, der Betreiber sieht immer alle Läden.
-  const arkaden = useSchedule(STORES[0].id);
-  const papenstieg = useSchedule(STORES[1].id);
-  const stores = [arkaden, papenstieg];
+  const jadeqa = useSchedule(STORES[0].id);
+  const stores = [jadeqa];
   // Monat/Jahr sind für alle gleich (der Ausdruck muss zusammenpassen). Der
   // Kopf steuert alle; angezeigt wird der Stand der ersten Filiale.
-  const primary = arkaden;
+  const primary = jadeqa;
 
   const [tab, setTab] = useState<TabId>("einstellungen");
   /** Trang Tài liệu mở riêng; đóng lại thì về đúng tab đang làm. */
@@ -86,7 +85,7 @@ function MainApp({ onLogout }: { onLogout: () => void }) {
   // erfolgreichen Lauf; der Effekt liest DANACH die (frische) Prüfung beider
   // Filialen aus.
   const [toast, setToast] = useState<string | null>(null);
-  const genStampSum = arkaden.genStamp + papenstieg.genStamp;
+  const genStampSum = jadeqa.genStamp;
   useEffect(() => {
     if (genStampSum === 0) return;
     const allErrors = stores.flatMap((s) => s.validation.errors);
@@ -94,10 +93,10 @@ function MainApp({ onLogout }: { onLogout: () => void }) {
     const warn = allErrors.filter((e) => e.severity === "warning").length;
     setToast(
       fehler > 0
-        ? `Đã tạo lịch ${stores.length} tiệm — nhưng còn ${fehler} lỗi, xem chi tiết ở phần trạng thái.`
+        ? `Đã tạo lịch — nhưng còn ${fehler} lỗi, xem chi tiết ở phần trạng thái.`
         : warn > 0
-          ? `✓ Đã tạo lịch ${stores.length} tiệm (còn ${warn} cảnh báo thiếu giờ — bấm (i) để xem).`
-          : `✓ Đã tạo lịch mới cho cả ${stores.length} tiệm — hợp lệ, đúng giờ hợp đồng.`,
+          ? `✓ Đã tạo lịch (còn ${warn} cảnh báo thiếu giờ — bấm (i) để xem).`
+          : `✓ Đã tạo lịch mới — hợp lệ, đúng giờ hợp đồng.`,
     );
     const t = window.setTimeout(() => setToast(null), 5000);
     return () => window.clearTimeout(t);
@@ -134,7 +133,7 @@ function MainApp({ onLogout }: { onLogout: () => void }) {
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {/* Tháng/năm dùng chung cho mọi tiệm – bản in phải cùng kỳ. */}
+            {/* Tháng/năm của bản kế hoạch và bản in. */}
             <div className="inline-flex items-center gap-1.5" aria-label="Chọn kỳ">
               <select
                 aria-label="Tháng"
@@ -174,7 +173,7 @@ function MainApp({ onLogout }: { onLogout: () => void }) {
             </button>
             <button
               onClick={() => {
-                if (confirm(`Xoá toàn bộ dữ liệu của cả ${stores.length} tiệm?`)) {
+                if (confirm("Xoá toàn bộ dữ liệu của tiệm?")) {
                   for (const s of stores) s.resetAll();
                 }
               }}

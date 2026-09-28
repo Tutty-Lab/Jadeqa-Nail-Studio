@@ -52,47 +52,19 @@ export const wholeDay = (blocks: DayBlocks): DayWindow[] =>
 const WERKTAGE: readonly WeekdayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday"];
 
 /**
- * Cơ sở 1 – Schloss Arkaden (658 Vertragsstunden im Monat, offen 09:30–20:00).
+ * J'ADEQA Nagelstudio – ein Laden, kleines Team (Inhaberin plus drei bis vier
+ * Angestellte, die häufig wechseln), offen Mo–Sa 09:30–20:00.
  *
- *  - „Phải phủ kín giờ mở cửa" – harte Regel: nie null Personen.
- *  - „Peak T2–T6 15:00–19:00, T7 11:00–19:00" – dort die höhere Untergrenze.
- *    Samstag ist der stärkste Tag (Gewicht 2,0) und trägt deshalb drei Leute.
+ *  - „Phủ kín giờ mở cửa" – harte Regel: nie null Personen im Studio.
+ *  - Hauptzeit Mo–Fr 15:00–19:00 und Sa ab 11:00 – dort die zweite Person.
  *
- * Die Untergrenzen sind gegen das Stundenbudget gerechnet: der schwächste Tag
- * (Dienstag) hat rund 17,7 h – Abdeckung 09:30–20:00 plus eine zweite Person
- * von 15 bis 19 Uhr kostet 14,5 h, passt also. Samstag hat rund 35 h, drei
- * Personen von 11 bis 19 Uhr kosten etwa 31 h.
+ * Bewusst NICHT drei Personen am Samstag wie in der großen King-Nail-Filiale:
+ * hier sind nur drei bis vier Verträge gleichzeitig aktiv, und eine
+ * Untergrenze, die das Stundenbudget nicht hergibt, erzeugt nur rote Felder im
+ * Bericht statt besserer Pläne. Der Deckel (max. 4) verhindert, dass an einem
+ * starken Tag alle gleichzeitig im Laden stehen.
  */
-export const ARKADEN_STAFFING_RULES: readonly StaffingRule[] = [
-  {
-    label: "Trong giờ mở cửa", when: "suốt giờ mở cửa", minStaff: 1, maxStaff: Infinity, scaled: false,
-    windows: wholeDay,
-  },
-  {
-    label: "Cao điểm T2–T6", when: "15:00–19:00", minStaff: 2, maxStaff: 5, scaled: false,
-    weekdays: WERKTAGE, windows: clip(PEAK_START, PEAK_END),
-  },
-  {
-    label: "Cao điểm T7", when: "11:00–19:00", minStaff: 3, maxStaff: 6, scaled: false,
-    weekdays: ["saturday"], windows: clip(SATURDAY_PEAK_START, PEAK_END),
-  },
-];
-
-/**
- * Cơ sở 2 – Papenstieg (439 Vertragsstunden, offen 09:00–19:00, Sa bis 18:00).
- *
- * Dieselbe Vorgabe wie in Arkaden: in der Hauptzeit zwei Personen, samstags
- * ebenfalls zwei (kleineres Team, kürzerer Samstag).
- *
- * ACHTUNG, das Budget ist knapp: das Tagesbudget folgt aus den Verträgen, und
- * ein Dienstag hat nur rund 12,3 h – die Abdeckung 09:00–19:00 kostet allein
- * 10 h, die zweite Person von 15 bis 19 Uhr weitere 4 h. An Dienstagen (und
- * gelegentlich montags) fehlt deshalb rechnerisch eine halbe bis anderthalb
- * Stunden; der Planer lässt dann in der Hauptzeit eine Lücke, NIE aber bei der
- * Abdeckung. Der Bericht „Độ phủ" zeigt diese Stellen rot an. Wer sie schließen
- * will, braucht mehr Vertragsstunden in Papenstieg.
- */
-export const PAPENSTIEG_STAFFING_RULES: readonly StaffingRule[] = [
+export const JADEQA_STAFFING_RULES: readonly StaffingRule[] = [
   {
     label: "Trong giờ mở cửa", when: "suốt giờ mở cửa", minStaff: 1, maxStaff: Infinity, scaled: false,
     windows: wholeDay,
@@ -102,13 +74,13 @@ export const PAPENSTIEG_STAFFING_RULES: readonly StaffingRule[] = [
     weekdays: WERKTAGE, windows: clip(PEAK_START, PEAK_END),
   },
   {
-    label: "Cao điểm T7", when: "11:00–18:00", minStaff: 2, maxStaff: 4, scaled: false,
-    weekdays: ["saturday"], windows: clip(SATURDAY_PEAK_START, 18 * 60),
+    label: "Cao điểm T7", when: "11:00–19:00", minStaff: 2, maxStaff: 4, scaled: false,
+    weekdays: ["saturday"], windows: clip(SATURDAY_PEAK_START, PEAK_END),
   },
 ];
 
 /** Rückfall für Tests und Altaufrufe. */
-export const STAFFING_RULES = ARKADEN_STAFFING_RULES;
+export const STAFFING_RULES = JADEQA_STAFFING_RULES;
 
 /** Mindest-/Höchstzahl einer Regel an einem Wochentag (Gewicht angewandt, aufgerundet). */
 export function ruleRange(rule: StaffingRule, weekday: WeekdayKey): { minStaff: number; maxStaff: number } {
@@ -281,12 +253,23 @@ export function weightedDailyTargets(
   openMinutesOf?: (date: string) => number,
   weights: Record<WeekdayKey, number> = DAY_WEIGHTS,
   floorOf?: (date: string) => number,
+  /**
+   * Kleinerer Sockel für den Fall, dass der volle nicht bezahlbar ist – in der
+   * Regel „eine Person über die ganze Öffnungszeit". Im Nagelstudio wechselt
+   * das Team, und in einem Monat mit nur drei Verträgen reichen die Stunden
+   * nicht mehr für zwei Personen in der Hauptzeit. Ohne diese zweite Stufe
+   * fällt die Verteilung auf reine Gewichtung zurück, und der schwächste Tag
+   * bekommt dann weniger Stunden, als das ÖFFNEN allein kostet – der Laden
+   * stünde zeitweise leer. Lieber überall offen als irgendwo voll.
+   */
+  fallbackFloorOf?: (date: string) => number,
 ): Map<string, number> {
   const factor = (date: string) => weights[weekdayOf(date)] * (openMinutesOf ? openMinutesOf(date) : 1);
   const sum = dates.reduce((acc, date) => acc + factor(date), 0);
   const share = (date: string, amount: number) => (sum > 0 ? amount * factor(date) / sum : 0);
-  if (floorOf) {
-    const floors = new Map(dates.map((date) => [date, floorOf(date)]));
+  for (const sockel of [floorOf, fallbackFloorOf]) {
+    if (!sockel) continue;
+    const floors = new Map(dates.map((date) => [date, sockel(date)]));
     const floorSum = [...floors.values()].reduce((a, b) => a + b, 0);
     if (floorSum > 0 && floorSum < total) {
       const rest = total - floorSum;

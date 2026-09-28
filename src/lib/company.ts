@@ -2,5 +2,5 @@
 // Feste Firmendaten (không cho sửa trong giao diện). Ändern nur hier im Code.
 // ============================================================================
 
-export const COMPANY_NAME = "King Nail Schloss Arkaden";
-export const COMPANY_ADDRESS = "Platz am Ritterbrunnen 1, 38100 Braunschweig";
+export const COMPANY_NAME = "J'ADEQA Nagelstudio";
+export const COMPANY_ADDRESS = "Südring 2, 67240 Bobenheim-Roxheim";

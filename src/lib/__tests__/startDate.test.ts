@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import { generateSchedule } from "../scheduler";
 import { validateSchedule } from "../validation";
-import { ARKADEN_WORK_HOURS, resolveDay } from "../workHours";
+import { JADEQA_WORK_HOURS, resolveDay } from "../workHours";
 import { publicHolidays } from "../holidays";
 import { datesOfMonth } from "../demand";
 import { monthlyTargetMinutesFor } from "../contract";
@@ -16,7 +16,7 @@ import type { Employee } from "../../types";
 
 const openDatesOf = (year: number, month: number): string[] => {
   const hol = publicHolidays(year);
-  return datesOfMonth(year, month).filter((d) => !resolveDay(ARKADEN_WORK_HOURS, d, hol, {}).closed);
+  return datesOfMonth(year, month).filter((d) => !resolveDay(JADEQA_WORK_HOURS, d, hol, {}).closed);
 };
 
 const wk = (id: string, h: number, x: Partial<Employee> = {}): Employee => ({

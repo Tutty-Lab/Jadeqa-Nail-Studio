@@ -118,7 +118,7 @@ export function analyzeSchedule(input: AnalyzeInput): ScheduleAnalysis {
     const hours = weekDates.reduce((sum, date) => sum + (byDate.get(date) ?? []).reduce((acc, shift) => acc + shift.paidMinutes, 0), 0) / 60;
     const openMinutesOf = (value: string) => resolveDay(input.workHours, value, holidays, overrides).blocks
       .reduce((sum, block) => sum + (block.endMinutes - block.startMinutes), 0);
-    for (const [date, target] of weightedDailyTargets(weekDates, hours, (value) => effectiveWeekdayKey(value, holidays), openMinutesOf, input.weights, (value) => minimumStaffHours(resolveDay(input.workHours, value, holidays, overrides).blocks, effectiveWeekdayKey(value, holidays), input.rules))) {
+    for (const [date, target] of weightedDailyTargets(weekDates, hours, (value) => effectiveWeekdayKey(value, holidays), openMinutesOf, input.weights, (value) => minimumStaffHours(resolveDay(input.workHours, value, holidays, overrides).blocks, effectiveWeekdayKey(value, holidays), input.rules), (value) => openMinutesOf(value) / 60)) {
       dailyTargets.set(date, target);
     }
   }

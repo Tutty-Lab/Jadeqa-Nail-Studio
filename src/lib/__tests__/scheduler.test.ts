@@ -3,7 +3,7 @@ import { generateSchedule } from "../scheduler";
 import { validateSchedule } from "../validation";
 import { maxConsecutiveRun } from "../consecutive";
 import { SAMPLE_EMPLOYEES } from "../sampleData";
-import { ARKADEN_WORK_HOURS } from "../workHours";
+import { JADEQA_WORK_HOURS } from "../workHours";
 import { calculatePause } from "../time";
 import { datesOfMonth, parseIsoDate } from "../demand";
 import { resolveDay } from "../workHours";
@@ -12,14 +12,14 @@ import { monthlyTargetMinutesFor } from "../contract";
 
 const openDatesOf = (year: number, month: number): string[] => {
   const hol = publicHolidays(year);
-  return datesOfMonth(year, month).filter((d) => !resolveDay(ARKADEN_WORK_HOURS, d, hol, {}).closed);
+  return datesOfMonth(year, month).filter((d) => !resolveDay(JADEQA_WORK_HOURS, d, hol, {}).closed);
 };
 
-describe("Scheduler – August 2026 Beispieldaten (Schloss Arkaden)", () => {
+describe("Scheduler – August 2026 Beispieldaten (J'ADEQA)", () => {
   const shifts = generateSchedule({
     year: 2026,
     month: 8,
-    workHours: ARKADEN_WORK_HOURS,
+    workHours: JADEQA_WORK_HOURS,
     employees: SAMPLE_EMPLOYEES,
   });
 
@@ -82,7 +82,7 @@ describe("Scheduler – August 2026 Beispieldaten (Schloss Arkaden)", () => {
     const again = generateSchedule({
       year: 2026,
       month: 8,
-      workHours: ARKADEN_WORK_HOURS,
+      workHours: JADEQA_WORK_HOURS,
       employees: SAMPLE_EMPLOYEES,
     });
     expect(again.map((s) => `${s.date}|${s.employeeId}|${s.paidMinutes}|${s.shiftType}`)).toEqual(
@@ -91,9 +91,9 @@ describe("Scheduler – August 2026 Beispieldaten (Schloss Arkaden)", () => {
   });
 
   it("keeps individual contracts while weighting busy days (T6/T7 = 2,0)", () => {
-    // Arkaden rechnet in Monatsstunden: die Person mit 150 h bekommt genau 150 h.
-    const own = shifts.filter((shift) => shift.employeeId === "arkaden-1");
-    expect(own.reduce((sum, shift) => sum + shift.paidMinutes, 0)).toBe(150 * 60);
+    // Die Inhaberin rechnet in Monatsstunden und bekommt genau ihre 169 h.
+    const own = shifts.filter((shift) => shift.employeeId === "jadeqa-0");
+    expect(own.reduce((sum, shift) => sum + shift.paidMinutes, 0)).toBe(169 * 60);
     // Tab „Tài liệu": Freitag und Samstag (Gewicht 2,0) tragen je Tag deutlich
     // mehr Stunden als ein normaler Tag.
     const proTag = (weekdays: number[]) => {
@@ -106,7 +106,9 @@ describe("Scheduler – August 2026 Beispieldaten (Schloss Arkaden)", () => {
     };
     const stark = proTag([5, 6]); // Fr, Sa
     const normal = proTag([1, 2, 3, 4]); // Mo–Do
-    expect(stark / normal).toBeGreaterThanOrEqual(1.4);
+    // Kleines Team: der Abstand fällt geringer aus als bei einer großen
+    // Filiale, weil jeder Tag zuerst die Mindestbesetzung tragen muss.
+    expect(stark / normal).toBeGreaterThanOrEqual(1.1);
     expect(stark / normal).toBeLessThanOrEqual(2.2);
   });
 });
@@ -116,7 +118,7 @@ describe("Scheduler – weitere Monate robust", () => {
     const shifts = generateSchedule({
       year: 2026,
       month: 2,
-      workHours: ARKADEN_WORK_HOURS,
+      workHours: JADEQA_WORK_HOURS,
       employees: SAMPLE_EMPLOYEES,
     });
     const result = validateSchedule(SAMPLE_EMPLOYEES, shifts, 2026, openDatesOf(2026, 2));

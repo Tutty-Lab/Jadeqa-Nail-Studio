@@ -1,8 +1,7 @@
 // ============================================================================
-// Öffnungszeiten je Wochentag. King Nail hat DURCHGEHEND offen (kein Block in
-// der Mitte), sonntags und an Feiertagen ist zu. Jede Filiale bringt ihre
-// eigenen Zeiten mit (stores.ts) – im Einkaufszentrum wird länger geöffnet als
-// im Ladengeschäft.
+// Öffnungszeiten je Wochentag. Das Studio hat DURCHGEHEND offen (kein Block in
+// der Mitte): Montag bis Samstag 09:30–20:00. Sonntags und an gesetzlichen
+// Feiertagen ist zu.
 // ============================================================================
 
 import { parseIsoDate, weekdayKeyOf, type WeekdayKey } from "./demand";
@@ -75,45 +74,26 @@ const CLOSED_SUNDAY: Record<WeekdayKey, boolean> = {
   sunday: true,
 };
 
-// Cơ sở 1 – Schloss Arkaden: T2–T7 09:30–20:00, CN nghỉ.
-const ARKADEN_TAG: DayBlocks = [w(9 * 60 + 30, 20 * 60)];
+// J'ADEQA Nagelstudio: T2–T7 09:30–20:00, CN nghỉ.
+const STUDIO_TAG: DayBlocks = [w(9 * 60 + 30, 20 * 60)];
 
-export const ARKADEN_WORK_HOURS: WorkHoursConfig = {
+export const JADEQA_WORK_HOURS: WorkHoursConfig = {
   perWeekday: {
-    monday: copy(ARKADEN_TAG),
-    tuesday: copy(ARKADEN_TAG),
-    wednesday: copy(ARKADEN_TAG),
-    thursday: copy(ARKADEN_TAG),
-    friday: copy(ARKADEN_TAG),
-    saturday: copy(ARKADEN_TAG),
-    sunday: copy(ARKADEN_TAG), // geschlossen, nur als Rückfall
+    monday: copy(STUDIO_TAG),
+    tuesday: copy(STUDIO_TAG),
+    wednesday: copy(STUDIO_TAG),
+    thursday: copy(STUDIO_TAG),
+    friday: copy(STUDIO_TAG),
+    saturday: copy(STUDIO_TAG),
+    sunday: copy(STUDIO_TAG), // geschlossen, nur als Rückfall
   },
-  holiday: copy(ARKADEN_TAG), // wird durch holidayClosed nicht benutzt
-  closedWeekdays: { ...CLOSED_SUNDAY },
-  holidayClosed: true,
-};
-
-// Cơ sở 2 – Papenstieg: T2–T6 09:00–19:00, T7 09:00–18:00, CN nghỉ.
-const PAPEN_WERKTAG: DayBlocks = [w(9 * 60, 19 * 60)];
-const PAPEN_SAMSTAG: DayBlocks = [w(9 * 60, 18 * 60)];
-
-export const PAPENSTIEG_WORK_HOURS: WorkHoursConfig = {
-  perWeekday: {
-    monday: copy(PAPEN_WERKTAG),
-    tuesday: copy(PAPEN_WERKTAG),
-    wednesday: copy(PAPEN_WERKTAG),
-    thursday: copy(PAPEN_WERKTAG),
-    friday: copy(PAPEN_WERKTAG),
-    saturday: copy(PAPEN_SAMSTAG),
-    sunday: copy(PAPEN_WERKTAG), // geschlossen, nur als Rückfall
-  },
-  holiday: copy(PAPEN_WERKTAG),
+  holiday: copy(STUDIO_TAG), // wird durch holidayClosed nicht benutzt
   closedWeekdays: { ...CLOSED_SUNDAY },
   holidayClosed: true,
 };
 
 /** Rückfall, wenn keine Filiale angegeben ist (Tests, Standardparameter). */
-export const DEFAULT_WORK_HOURS: WorkHoursConfig = ARKADEN_WORK_HOURS;
+export const DEFAULT_WORK_HOURS: WorkHoursConfig = JADEQA_WORK_HOURS;
 
 /**
  * Für Nachfrage und Besetzung maßgeblicher Wochentag. Feiertage sind hier
