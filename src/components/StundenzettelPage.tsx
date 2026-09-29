@@ -1,7 +1,7 @@
 import type { ReactElement } from "react";
 import type { Employee, Schedule } from "../types";
 import { datesOfMonth } from "../lib/demand";
-import { monthLabelDe, paintStundenzettel, SZ_PAGE_H, SZ_PAGE_W, type SzPainter } from "../lib/pdf";
+import { monthLabelDe, paintAbrechnung, paintStundenzettel, SZ_PAGE_H, SZ_PAGE_W, type SzPainter } from "../lib/pdf";
 
 // pt -> mm (jsPDF-Schriftgrößen sind in pt, die Seite rechnet in mm).
 const PT = 25.4 / 72;
@@ -29,6 +29,35 @@ export function StundenzettelPage({
   /** Zeitraum-Text; fehlend => Monat/Jahr. */
   periodLabel?: string;
 }) {
+  const d = dates ?? datesOfMonth(schedule.year, schedule.month);
+  const label = periodLabel ?? monthLabelDe(schedule.year, schedule.month);
+  // Dieselben zwei Seiten wie in der PDF: Abrechnungsformular + Stundennachweis.
+  const seiten = [paintAbrechnung, paintStundenzettel].map((paint) => {
+    const items = svgItems((painter) => paint(painter, schedule, employee, d, label));
+    return items;
+  });
+
+  return (
+    <div className="mx-auto max-w-[210mm] space-y-3 bg-slate-200">
+      {seiten.map((items, i) => (
+        <svg
+          key={i}
+          viewBox={`0 0 ${SZ_PAGE_W} ${SZ_PAGE_H}`}
+          className="block w-full min-w-[560px] h-auto bg-white"
+          fill="black"
+          role="img"
+          aria-label={`${i === 0 ? "Abrechnung" : "Arbeitszeitnachweis"} ${employee.name}`}
+        >
+          <rect width={SZ_PAGE_W} height={SZ_PAGE_H} fill="white" />
+          {items}
+        </svg>
+      ))}
+    </div>
+  );
+}
+
+/** Zeichnet eine Seite über den gemeinsamen Painter in SVG-Elemente. */
+function svgItems(paint: (painter: SzPainter) => void): ReactElement[] {
   const items: ReactElement[] = [];
   const painter: SzPainter = {
     text(text, x, y, o) {
@@ -62,26 +91,6 @@ export function StundenzettelPage({
       );
     },
   };
-  paintStundenzettel(
-    painter,
-    schedule,
-    employee,
-    dates ?? datesOfMonth(schedule.year, schedule.month),
-    periodLabel ?? monthLabelDe(schedule.year, schedule.month),
-  );
-
-  return (
-    <div className="mx-auto max-w-[210mm] bg-white">
-      <svg
-        viewBox={`0 0 ${SZ_PAGE_W} ${SZ_PAGE_H}`}
-        className="block w-full min-w-[560px] h-auto"
-        fill="black"
-        role="img"
-        aria-label={`Arbeitszeitnachweis ${employee.name}`}
-      >
-        <rect width={SZ_PAGE_W} height={SZ_PAGE_H} fill="white" />
-        {items}
-      </svg>
-    </div>
-  );
+  paint(painter);
+  return items;
 }

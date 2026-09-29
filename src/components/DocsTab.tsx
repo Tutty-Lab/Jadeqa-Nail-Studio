@@ -224,7 +224,7 @@ Tiệm nail mở <b>liên tục cả ngày</b>, chủ luôn có mặt, và nhân
             <li><b>{duty?.store.shortName}: ngày lễ phải có {holidayDuty.name} trong ca</b> — bật ở tab Nhân viên (ô „Trực ngày lễ"), thuật toán giữ chỗ cho người đó trước rồi mới chia phần còn lại. Tiệm còn lại không có yêu cầu này.</li>
           )}
           <li><b>Ngày làm {SHIFT_LENGTHS[0]}–{SHIFT_LENGTHS[SHIFT_LENGTHS.length - 1]} giờ công.</b> Tiệm mở liên tục nên mỗi ngày mỗi người chỉ một ca liền mạch; ca không bao giờ dưới 3 giờ.</li>
-          <li><b>Tối đa 5 ngày/tuần</b> cho nhân viên (ai cũng có thêm một ngày nghỉ ngoài Chủ nhật). Riêng <b>chủ tiệm</b> không giới hạn, vì 169h/tháng không nằm vừa 5 ngày/tuần trong tháng ngắn.</li>
+          <li><b>Tối đa 5 ngày/tuần</b> cho nhân viên (ai cũng có thêm một ngày nghỉ ngoài Chủ nhật). <b>Chủ tiệm không nằm trong lịch</b>: giờ mở cửa phải do nhân viên có hợp đồng phủ, để không có ngày trông như có người mà thật ra chỉ có chủ.</li>
         </ul>
       </Section>
 

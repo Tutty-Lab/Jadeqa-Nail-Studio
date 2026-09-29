@@ -144,6 +144,10 @@ describe("Hauptzeit", () => {
    * bezahlbar: das Team ist klein und wechselt, und in einer angebrochenen
    * Woche am Monatsrand gehört nur ein Teil der Woche zum Monat. Die Schwelle
    * ist eine Regressionsbremse – wird es mehr, stimmt etwas nicht.
+   *
+   * Die Inhaberin steht nicht im Plan. Reichen die Vertragsstunden nicht für
+   * Öffnungszeit + zweite Person in der Hauptzeit, fehlt der Rest zwangsläufig:
+   * diese halben Stunden kommen zum Budget dazu.
    */
   const LUECKEN_BUDGET = 40;
 
@@ -152,6 +156,17 @@ describe("Hauptzeit", () => {
     for (const month of MONTHS) {
       const shifts = planOf(2026, month, store);
       let luecken = 0;
+      let bedarf = 0; // benötigte Personen-Halbstunden
+      for (const date of openDatesOf(2026, month, store)) {
+        const tag = resolveDay(store.workHours, date, holidays, {});
+        const fenster = staffingWindows(tag.blocks, weekdayKeyOf(parseIsoDate(date)), store.staffingRules);
+        for (const b of tag.blocks) for (let m = b.startMinutes; m < b.endMinutes; m += 30) {
+          bedarf += Math.max(1, ...fenster.filter((w) => m >= w.startMinutes && m < w.endMinutes).map((w) => w.minStaff));
+        }
+      }
+      const open = openDatesOf(2026, month, store);
+      const vertrag = teamOf(store).reduce((sum, e) => sum + monthlyTargetMinutesFor(e, open, store.workHours), 0) / 30;
+      const unvermeidbar = Math.max(0, Math.ceil(bedarf - vertrag));
       for (const date of openDatesOf(2026, month, store)) {
         const onDay = shifts.filter((s) => s.date === date);
         const day = resolveDay(store.workHours, date, holidays, {});
@@ -162,7 +177,7 @@ describe("Hauptzeit", () => {
           }
         }
       }
-      expect(luecken, `${store.shortName} ${month}/2026`).toBeLessThanOrEqual(LUECKEN_BUDGET);
+      expect(luecken, `${store.shortName} ${month}/2026`).toBeLessThanOrEqual(LUECKEN_BUDGET + unvermeidbar);
     }
   });
 

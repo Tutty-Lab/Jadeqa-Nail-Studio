@@ -15,11 +15,12 @@
 //   Van Anh Nguyen      Eintritt 01.11.2025            Wöch.Arb.Zt. 5,00 h
 //   Thuy Linh Tran      Eintritt 15.01.2026            Wöch.Arb.Zt. 19,50 h
 //
-// ACHTUNG, zwei Annahmen, die der Betrieb bestätigen muss:
-//  1. Die INHABERIN steht als „Chu tiem" mit 169 h im Plan – sie ist laut
-//     Angabe immer im Laden, hat aber keine Lohnabrechnung. Name und Stunden
-//     im Tab „Nhân viên" anpassen.
-//  2. Wer seine Stunden im Lauf der Zeit geändert hat, steht mit dem ZULETZT
+// Die INHABERIN steht bewusst NICHT im Plan: sie ist zwar meist im Laden,
+// aber der Plan muss die Öffnungszeit mit den Angestellten allein abdecken –
+// sonst sieht ein Tag "besetzt" aus, an dem nur die Chefin da ist.
+//
+// ACHTUNG, eine Annahme, die der Betrieb bestätigen muss:
+//  Wer seine Stunden im Lauf der Zeit geändert hat, steht mit dem ZULETZT
 //     belegten Wert hier (Quynh Nhu Nguyen: 117 h im September 2025, dann
 //     27 h/Woche, seit Februar 2026 19,5 h/Woche). Für einen älteren Monat die
 //     Stundenzahl vor dem Erzeugen des Plans umstellen.
@@ -61,15 +62,6 @@ export function makeWeekly(
  */
 export function jadeqaEmployees(): Employee[] {
   return [
-    {
-      // ANNAHME: Inhaberin, immer im Laden. Ohne sie reichen die Verträge nicht,
-      // um 09:00–19:00 an 26 Tagen zu besetzen.
-      //
-      // Als EINZIGE ohne Fünf-Tage-Grenze: 169 h passen in einem kurzen Monat
-      // (Februar, 24 offene Tage) sonst nicht in fünf Tage je Woche – 20 Tage
-      // mal höchstens 8 h sind nur 160 h. Sie ist ohnehin jeden Tag im Laden.
-      ...makeEmployee("jadeqa-0", "Chu tiem", "VOLLZEIT", 169),
-    },
     {
       ...makeEmployee("jadeqa-1", "Thi Kim Oanh Pham", "TEILZEIT", 70.2),
       startDate: "2024-11-01",

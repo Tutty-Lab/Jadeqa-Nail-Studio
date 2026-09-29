@@ -56,6 +56,14 @@ function overridesToMap(list: DateOverride[]): OverrideMap {
   return map;
 }
 
+/**
+ * Früher stand die Inhaberin ("Chu tiem", id jadeqa-0) mit 169 h im Plan. Sie
+ * gehört nicht hinein: die Öffnungszeit müssen die Angestellten abdecken. Alte
+ * gespeicherte Stände verlieren sie samt ihren Diensten beim Laden.
+ */
+const REMOVED_EMPLOYEE_IDS = new Set(["jadeqa-0"]);
+const withoutRemoved = (shifts: Shift[]): Shift[] => shifts.filter((s) => !REMOVED_EMPLOYEE_IDS.has(s.employeeId));
+
 /** Migriert einen (evtl. alten) gespeicherten Stand auf das aktuelle Schema. */
 function normalizeSchedule(raw: Schedule | undefined, store: StoreConfig): Schedule {
   const base = emptySchedule(store);
@@ -68,8 +76,8 @@ function normalizeSchedule(raw: Schedule | undefined, store: StoreConfig): Sched
     month: raw.month ?? base.month,
     workHours: normalizeWorkHours(raw.workHours, store.workHours),
     dateOverrides: Array.isArray(raw.dateOverrides) ? raw.dateOverrides : [],
-    employees: raw.employees ?? [],
-    shifts: raw.shifts ?? [],
+    employees: (raw.employees ?? []).filter((e) => !REMOVED_EMPLOYEE_IDS.has(e.id)),
+    shifts: withoutRemoved(raw.shifts ?? []),
     lockedAt: raw.lockedAt,
     printedWeeks: Array.isArray(raw.printedWeeks) ? raw.printedWeeks : [],
   };
@@ -81,7 +89,7 @@ function localStateOf(storeId: string): PersistedState {
   const persisted = loadState(storeId);
   return {
     schedule: normalizeSchedule(persisted?.schedule ?? initialScheduleFor(store), store),
-    originalShifts: persisted?.originalShifts ?? [],
+    originalShifts: withoutRemoved(persisted?.originalShifts ?? []),
     passwordHash: persisted?.passwordHash,
   };
 }
@@ -137,7 +145,7 @@ export function useSchedule(storeId: string) {
         if (cancelled) return;
         if (remote?.schedule) {
           setSchedule(normalizeSchedule(remote.schedule, storeById(storeId)));
-          setOriginalShifts(remote.originalShifts ?? []);
+          setOriginalShifts(withoutRemoved(remote.originalShifts ?? []));
           setPasswordHash(remote.passwordHash);
         } else if (hatInhalt(latest.current)) {
           // Noch keine Zeile für diese Filiale: lokalen Stand hochladen –

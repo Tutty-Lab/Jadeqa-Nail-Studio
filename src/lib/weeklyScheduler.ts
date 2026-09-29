@@ -59,6 +59,13 @@ type Day = ReturnType<typeof resolveDay>;
 
 const SLOT = 30;
 const MIN_SHIFT = 180;
+/**
+ * Angestrebte Dienstlänge. Früher wurde die Woche auf möglichst VIELE Tage
+ * verteilt (Stunden ÷ 3 h) – heraus kamen 3-Stunden-Stafetten 9–12, 12–15,
+ * 15–18 an fünf Tagen. Lieber weniger Tage mit ~5–6 h: weniger Anfahrten,
+ * und eine Person trägt die Hauptzeit von Anfang bis Ende.
+ */
+const PREFERRED_SHIFT = 360;
 /** Höchste bezahlte Zeit je Tag: 8 h (Vorgabe des Betriebs, siehe validation.ts). */
 const MAX_PAID = 480;
 /** Cost per (person deviation)² per 30-minute slot against the demand curve. */
@@ -290,7 +297,7 @@ function chooseWeek(
   if (employee.fixedShift && fixed === 0) return [];
   const preferredCount = fixed
     ? Math.min(limit, Math.floor(target / fixed))
-    : Math.min(limit, Math.max(1, Math.floor(target / MIN_SHIFT)));
+    : Math.min(limit, Math.max(1, Math.ceil(target / PREFERRED_SHIFT - 1e-9)));
 
   // ±1,5 h um den Durchschnitt: genug Spielraum, damit Stoßtage (Gewicht 1,5)
   // längere und Normaltage kürzere Dienste bekommen können.
@@ -559,6 +566,10 @@ function tradeMinutes(
     return best;
   };
 
+  /** Steht der Laden an diesem Tag zeitweise leer? */
+  const leerAm = (shifts: Shift[], date: string): boolean =>
+    leerMinuten(shifts.filter((s) => s.date === date), days.get(date)!.blocks) > 0;
+
   const paidOf = (shifts: Shift[], id: string, date: string): number =>
     shifts.filter((s) => s.employeeId === id && s.date === date).reduce((sum, s) => sum + s.paidMinutes, 0);
 
@@ -574,14 +585,29 @@ function tradeMinutes(
         // zwischen Personen. Ohne ihn bleibt ein Tag mit 10,0 h für 10,5 h
         // Öffnungszeit unterbesetzt, egal wie man die Dienste legt.
         for (const person of movable) {
-          const aufTag = paidOf(current, person.id, needy);
-          if (!aufTag) continue;
-          for (const quelle of weekDates) {
+          // Auch wer am knappen Tag noch GAR NICHT arbeitet, darf Zeit dorthin
+          // mitnehmen (am Monatsende reicht sonst oft niemand) – aber nur, wenn
+          // er dort arbeiten darf und die Tage je Woche nicht überschritten werden.
+          if (!paidOf(current, person.id, needy) && (!mayWorkOn(person, needy) || ctx.blocked.get(person.id)?.has(needy))) continue;
+          // Ein MONATSvertrag darf Zeit aus einer anderen Woche holen – nötig für
+          // eine Rumpfwoche am Monatsende (z. B. nur Montag, der 30.). Ein
+          // Wochenvertrag bleibt in seiner Woche.
+          const quellen = person.weeklyHours == null && weekDates.length < 6 && leerAm(current, needy)
+            ? open.map(([date]) => date)
+            : weekDates;
+          for (const quelle of quellen) {
             if (quelle === needy) continue;
+            const gleicheWoche = weekDates.includes(quelle);
+            // Nach jedem angenommenen Schritt NEU lesen – sonst rechnet der nächste
+            // Schritt mit dem alten Stand und verliert Minuten.
+            const aufTag = paidOf(current, person.id, needy);
+            const arbeitstage = new Set(current.filter((s) => s.employeeId === person.id && weekDates.includes(s.date)).map((s) => s.date)).size;
             const abgeben = paidOf(current, person.id, quelle);
             if (!abgeben) continue;
             for (const menge of tradeAmounts(abgeben, aufTag + MAX_PAID)) {
               if (aufTag + menge > MAX_PAID) break;
+              if (!aufTag && aufTag + menge < MIN_SHIFT) continue;
+              if (!aufTag && (!gleicheWoche || abgeben - menge > 0) && arbeitstage + 1 > dayLimit(person)) continue;
               const rest = current.filter(
                 (s) => !(s.employeeId === person.id && (s.date === needy || s.date === quelle)),
               );
@@ -589,7 +615,12 @@ function tradeMinutes(
               const mehr = placePair(needy, person, aufTag + menge, person, 0, rest.filter((s) => s.date === needy));
               const weniger = placePair(quelle, person, abgeben - menge, person, 0, rest.filter((s) => s.date === quelle));
               if (!mehr || !weniger) continue;
-              const nachher = [...rest, ...mehr, ...weniger];
+              let nachher = [...rest, ...mehr, ...weniger];
+              // Die zusätzliche Zeit hilft oft erst, wenn die ANDEREN an dem Tag
+              // mitrücken (Loch um 9:00, die neue Stunde landet sonst am Nachmittag).
+              if (leerAm(nachher, needy) && costOf(nachher, needy) + costOf(nachher, quelle) >= vorher - 0.01) {
+                nachher = improveCoverage(nachher, employees, days, holidays, dailyTargets, ctx, new Set([needy, quelle]));
+              }
               if (costOf(nachher, needy) + costOf(nachher, quelle) < vorher - 0.01) {
                 current = nachher;
                 changed = true;
@@ -703,10 +734,11 @@ function costWithBestPauses(
   return dayCost(aktuell, blocks, weekday, target, ctx);
 }
 
-function improveCoverage(result: Shift[], employees: Employee[], days: Map<string, Day>, holidays: Set<string>, dailyTargets: Map<string, number>, ctx: Ctx): Shift[] {
+function improveCoverage(result: Shift[], employees: Employee[], days: Map<string, Day>, holidays: Set<string>, dailyTargets: Map<string, number>, ctx: Ctx, only?: Set<string>): Shift[] {
   const output: Shift[] = [];
   for (const [date, day] of days) {
     let onDay = result.filter((shift) => shift.date === date);
+    if (only && !only.has(date)) { output.push(...onDay); continue; }
     const weekday = effectiveWeekdayKey(date, holidays);
     const target = dailyTargets.get(date);
     const partialWeek = [...days].filter(([otherDate, otherDay]) => !otherDay.closed && weekStartOf(otherDate) === weekStartOf(date)).length < 6;

@@ -471,7 +471,219 @@ export function paintStundenzettel(
   });
 }
 
-/** Zeichnet EINEN Stundenzettel auf die aktuelle PDF-Seite. */
+// ── Seite 1: Abrechnungsformular (Aufbau wie die Lohnabrechnung) ───────────
+// Maße direkt aus der Vorlage (Abrechnung 05/2025) abgenommen: die Vorlage
+// liegt als Bild mit 4,238 px/mm vor, Seitenursprung bei (14 px, 10 px). So
+// stehen alle Felder genau dort, wo sie auf der echten Abrechnung stehen.
+// Befüllt wird nur, was die App wirklich kennt (Name, Eintritt/Austritt,
+// Anwesenheitstage/-stunden, Arbeitszeit laut Vertrag). Alles andere – Beträge,
+// Steuer, SV, Bank – bleibt LEER. Bewusst weggelassen: Logo, Formular-/
+// Mandantennummern und der Vermerk „Entgeltbescheinigung nach § 108 GewO" –
+// das Blatt erstellt der Betrieb selbst, nicht das Rechenzentrum.
+const PX = (px: number) => (px - 14) / 4.238;
+const PY = (py: number) => (py - 10) / 4.283;
+
+/** Kopfzeile aus Feldern: Beschriftung oben, Wert unten, Linien mit Trennstrichen. */
+function formRow(
+  p: SzPainter,
+  topPx: number,
+  bottomPx: number,
+  x0Px: number,
+  x1Px: number,
+  fields: Array<{ x: number; label: string; value?: string; right?: number }>,
+): void {
+  const top = PY(topPx);
+  const bottom = PY(bottomPx);
+  hline(p, PX(x0Px), PX(x1Px), top, 0.15);
+  hline(p, PX(x0Px), PX(x1Px), bottom, 0.15);
+  for (const [i, f] of fields.entries()) {
+    if (i > 0) {
+      vline(p, PX(f.x - 2), top, top + 2.9, 0.15);
+      vline(p, PX(f.x - 2), bottom - 1, bottom, 0.15);
+    }
+    label(p, f.label, PX(f.x), top + 2.3, { fs: 5.4 });
+    if (f.value) {
+      if (f.right != null) value(p, f.value, PX(f.right), bottom - 1.2, { fs: 10, align: "right" });
+      else value(p, f.value, PX(f.x), bottom - 1.2, { fs: 10 });
+    }
+  }
+}
+
+/** Überschriften einer Tabellenzeile mit kurzen Trennern (Brutto, Steuer, SV …). */
+function headRow(p: SzPainter, yPx: number, x0Px: number, x1Px: number, heads: Array<[number, string, boolean?]>, seps: number[]): void {
+  hline(p, PX(x0Px), PX(x1Px), PY(yPx), 0.3);
+  for (const [x, text, bold] of heads) label(p, text, PX(x), PY(yPx) + 2.6, { fs: 5.4, bold });
+  for (const x of seps) vline(p, PX(x), PY(yPx), PY(yPx) + 3.6, 0.15);
+}
+
+/** Wertzeile ohne Werte: nur die kleinen Stellenmarken wie im Original. */
+function ticks(p: SzPainter, yPx: number, xs: number[]): void {
+  for (const x of xs) vline(p, PX(x), PY(yPx) - 1, PY(yPx), 0.15);
+}
+
+export function paintAbrechnung(
+  p: SzPainter,
+  schedule: Schedule,
+  employee: Employee,
+  dates: string[],
+  periodLabel: string,
+): void {
+  const { rows, totalMinutes } = stundenzettelRowsFor(schedule, employee, dates);
+  const workDays = rows.filter((r) => r.shiftCount > 0).length;
+  const R = 873; // rechte Kante der Betragsspalte (px)
+
+  // ── Kopf ────────────────────────────────────────────────────────────────
+  label(p, "Abrechnung der Brutto/Netto-Bezüge", PX(82), PY(80), { bold: true, fs: 11 });
+  value(p, `für ${periodLabel}`, PX(383), PY(80), { fs: 10.5 });
+  value(p, format(new Date(), "dd.MM.yyyy"), PX(810), PY(80), { fs: 10.5, align: "right" });
+  label(p, "Blatt:", PX(823), PY(79), { fs: 5.4 });
+  value(p, "1", PX(R), PY(80), { fs: 10.5, align: "right" });
+
+  // ── Feldzeilen links ────────────────────────────────────────────────────
+  formRow(p, 85, 118, 80, 632, [
+    { x: 82, label: "Personal-Nr." }, { x: 125, label: "Geburtsdatum" }, { x: 200, label: "StKl" },
+    { x: 220, label: "Faktor" }, { x: 265, label: "Ki.Frbtr." }, { x: 300, label: "Konfession" },
+    { x: 355, label: "Freibetrag jährl." }, { x: 437, label: "Freibetrag mtl." }, { x: 511, label: "DBA" },
+    { x: 546, label: "Midijob" }, { x: 610, label: "St.-Tg." },
+  ]);
+  formRow(p, 118, 155, 80, 632, [
+    { x: 82, label: "SV-Nummer" }, { x: 200, label: "Krankenkasse" }, { x: 478, label: "KK %" },
+    { x: 511, label: "PGRS" }, { x: 546, label: "BGRS" }, { x: 580, label: "Um." }, { x: 597, label: "SV-Tg." },
+  ]);
+  formRow(p, 155, 190, 508, 632, [
+    { x: 511, label: "Eintritt", value: dShort(employee.startDate) },
+    { x: 575, label: "Austritt", value: dShort(employee.endDate) },
+  ]);
+  formRow(p, 190, 227, 508, 632, [{ x: 511, label: "Steuer-ID" }, { x: 620, label: "MFB" }]);
+
+  // ── Feldblock rechts ────────────────────────────────────────────────────
+  formRow(p, 85, 118, 652, R + 2, [
+    { x: 655, label: "VJ Url. üb." }, { x: 711, label: "Url. Anspr." }, { x: 765, label: "Url.Tg.gen." }, { x: 820, label: "Resturlaub" },
+  ]);
+  formRow(p, 118, 155, 652, R + 2, [
+    { x: 655, label: "Anw. Tage", value: String(workDays), right: 707 }, { x: 711, label: "Urlaub Tage" },
+    { x: 765, label: "Krankh. Tg." }, { x: 820, label: "Fehlz. Tage" },
+  ]);
+  formRow(p, 155, 190, 652, R + 2, [
+    { x: 655, label: "Anw. Std.", value: minutesToDecimalHours(totalMinutes), right: 707 }, { x: 711, label: "Urlaub Std." },
+    { x: 765, label: "Krankh. Std." }, { x: 820, label: "Fehlz. Std." },
+  ]);
+  formRow(p, 190, 227, 652, R + 2, [
+    { x: 655, label: "" }, { x: 711, label: "Zeitlohn Std." }, { x: 765, label: "Überstd." }, { x: 820, label: "Bez. Std." },
+  ]);
+
+  // ── Firmenzeile, Pers.-Nr., Hinweise ────────────────────────────────────
+  const firma = [schedule.companyName, ...(schedule.address ? schedule.address.split(/,\s*/) : [])].join("*");
+  value(p, firma, PX(113), PY(233), { fs: 4.6 });
+  value(p, "*Pers.-Nr.       *", PX(232), PY(264), { fs: 6.2 });
+  label(p, "Hinweise zur Abrechnung", PX(511), PY(258), { bold: true, fs: 5.6 });
+  hline(p, PX(508), PX(R + 2), PY(265), 0.3);
+  const vertrag = employee.weeklyHours != null
+    ? `Wöch.Arb.Zt. ${commaHours(employee.weeklyHours)}`
+    : employee.targetMinutes > 0 ? `Mtl.Arb.Zt. ${commaHours(employee.targetMinutes / 60)}` : "";
+  if (vertrag) value(p, vertrag, PX(495), PY(275), { fs: 10 });
+
+  // ── Anschrift (nur Name; Straße und Ort von Hand) ───────────────────────
+  value(p, employee.name, PX(113), PY(333), { fs: 11 });
+
+  // Falzmarken am linken Rand
+  for (const y of [462, 648, 915]) hline(p, PX(30), PX(45), PY(y), 0.2);
+
+  // ── Brutto-Bezüge ───────────────────────────────────────────────────────
+  const SPLIT = 745;
+  label(p, "Brutto-Bezüge", PX(82), PY(441), { bold: true, fs: 5.6 });
+  headRow(p, 447, 80, 740, [
+    [82, "Lohnart"], [128, "Bezeichnung"], [410, "Einheit²"], [482, "Menge³"], [566, "Faktor³"],
+    [602, "Prozentsatz"], [665, "St4"], [692, "SV4"], [720, "GB5"],
+  ], [124, 408, 518, 598, 660, 688, 716]);
+  // Die einzige Position, die die App belegen kann: die Arbeitszeit laut Nachweis.
+  value(p, "Arbeitszeit lt. Stundennachweis", PX(128), PY(478), { fs: 10 });
+  value(p, "Std", PX(420), PY(478), { fs: 10 });
+  value(p, minutesToDecimalHours(totalMinutes), PX(514), PY(478), { fs: 10, align: "right" });
+
+  // Betragsspalte rechts
+  vline(p, PX(SPLIT), PY(447), PY(1105), 0.3);
+  hline(p, PX(750), PX(R + 2), PY(447), 0.5);
+  label(p, "Betrag", PX(R), PY(459), { bold: true, fs: 5.6, align: "right" });
+  for (const [y, text] of [
+    [702, "Gesamt-Brutto"], [738, "Steuerrechtliche Abzüge"], [812, "SV-rechtliche Abzüge"],
+  ] as const) {
+    hline(p, PX(750), PX(R + 2), PY(y), 0.5);
+    label(p, text, PX(R), PY(y + 11), { bold: true, fs: 5.6, align: "right" });
+  }
+
+  // ── Steuer / Sozialversicherung ─────────────────────────────────────────
+  label(p, "Steuer/Sozialversicherung", PX(82), PY(734), { bold: true, fs: 5.6 });
+  headRow(p, 738, 80, 740, [
+    [82, "St4", true], [152, "Steuer-Brutto", true], [280, "Lohnsteuer", true], [378, "Kirchensteuer", true], [460, "Solidaritätszuschlag", true],
+  ], [215, 340, 445, 556]);
+  ticks(p, 773, [190, 310, 418, 527]);
+  ticks(p, 792, [190, 310, 418, 527]);
+  headRow(p, 812, 80, 740, [
+    [82, "SV4", true], [130, "KV-Brutto", true], [213, "RV-Brutto", true], [294, "AV-Brutto", true], [362, "PV-Brutto", true],
+    [455, "KV-Beitrag", true], [532, "RV-Beitrag", true], [608, "AV-Beitrag", true], [690, "PV-Beitrag 6", true],
+  ], [105, 190, 270, 350, 430, 512, 590, 665]);
+  ticks(p, 862, [155, 236, 318, 400, 482, 562, 638, 718]);
+  ticks(p, 882, [155, 236, 318, 400, 482, 562, 638, 718]);
+
+  hline(p, PX(80), PX(R + 2), PY(885), 0.5);
+  label(p, "Netto-Verdienst", PX(R), PY(896), { bold: true, fs: 5.6, align: "right" });
+  hline(p, PX(750), PX(R + 2), PY(918), 0.3);
+  label(p, "Betrag", PX(R), PY(929), { bold: true, fs: 5.6, align: "right" });
+
+  // ── Verdienstbescheinigung ──────────────────────────────────────────────
+  label(p, "Verdienstbescheinigung", PX(82), PY(916), { bold: true, fs: 5.6 });
+  hline(p, PX(80), PX(440), PY(920), 0.3);
+  const links = ["Gesamt-Brutto", "Steuer-Brutto", "Lohnsteuer", "Kirchensteuer", "Solidaritätszuschlag",
+    "Steuerfreie Bezüge", "P. verst. Zuk.sich.", "", "Pfändung Rest", "Darlehen Rest"];
+  const rechts = ["SV-Brutto", "KV-Beitrag", "RV-Beitrag", "AV-Beitrag", "PV-Beitrag", "VWL gesamt", "Kug-Auszahlung"];
+  links.forEach((t, i) => { if (t) label(p, t, PX(82), PY(935 + i * 18.4), { fs: 5.4 }); });
+  rechts.forEach((t, i) => label(p, t, PX(275), PY(935 + i * 18.4), { fs: 5.4 }));
+  vline(p, PX(272), PY(920), PY(1105), 0.15);
+  hline(p, PX(80), PX(440), PY(1105), 0.3);
+
+  label(p, "Netto-Bezüge/Netto-Abzüge", PX(462), PY(916), { bold: true, fs: 5.6 });
+  hline(p, PX(460), PX(740), PY(920), 0.3);
+  label(p, "Lohnart", PX(462), PY(931), { fs: 5.4 });
+  label(p, "Bezeichnung", PX(510), PY(931), { fs: 5.4 });
+  vline(p, PX(506), PY(920), PY(934), 0.15);
+
+  // ── Auszahlung ──────────────────────────────────────────────────────────
+  value(p, "Betrag erhalten:", PX(108), PY(1135), { fs: 10.5 });
+  hline(p, PX(80), PX(440), PY(1141), 0.3);
+  label(p, "Bank", PX(82), PY(1153), { fs: 5.4 });
+  label(p, "Konto", PX(82), PY(1171), { fs: 5.4 });
+  hline(p, PX(460), PX(R + 2), PY(1141), 0.3);
+  for (const [x, text] of [[485, "SV-AG-Anteil"], [560, "Zus. AG-Kosten"]] as const) label(p, text, PX(x), PY(1152), { fs: 5.4 });
+  label(p, "Gesamtkosten", PX(738), PY(1152), { fs: 5.4, align: "right" });
+  label(p, "Auszahlungsbetrag", PX(R), PY(1152), { bold: true, fs: 5.6, align: "right" });
+  vline(p, PX(540), PY(1141), PY(1155), 0.15);
+  vline(p, PX(628), PY(1141), PY(1155), 0.15);
+  vline(p, PX(SPLIT), PY(1141), PY(1176), 0.3);
+  hline(p, PX(460), PX(R + 2), PY(1176), 0.5);
+
+  // ── Legende (Hochzahlen der Spaltenköpfe) ───────────────────────────────
+  const legende: Array<[number, number, string]> = [
+    [82, 1186, "¹ H = Hinzurechnungsbetrag"],
+    [82, 1193, "² Std = Stunden, T = Tage, Km = Kilometer, St = Stück"],
+    [82, 1200, "   EUR = Euro, Tsd = Tausend Euro, Mio = Million Euro"],
+    [82, 1207, "³ Gegebenenfalls Netto-Lohn/Netto-Stundenlohn"],
+    [310, 1186, "4 L = Laufender Bezug, S = Sonstiger Bezug, F = Frei,"],
+    [310, 1193, "   E = Einmalbezug, P = Pauschalierung, A = Abfindung,"],
+    [310, 1200, "   M = mehrjähriger Bezug, N = Nachberechnung"],
+    [310, 1207, "   V = Vorjahr, W = Entgeltguthaben"],
+    [535, 1186, "5 J = Bestandteil des Gesamt-Bruttos"],
+    [535, 1193, "6 Z = Einschl. Beitragszuschlag zur PV für Kinderlose"],
+    [535, 1200, "7 MFB = Mehrfachbeschäftigung"],
+    [535, 1207, "8 Maßgeblicher Beitragssatz zur KV inkl. Zusatzbeitrag"],
+  ];
+  for (const [x, y, t] of legende) label(p, t, PX(x), PY(y), { fs: 4.3 });
+}
+
+/**
+ * Zeichnet die Unterlagen EINER Person: Seite 1 das Abrechnungsformular,
+ * Seite 2 der Stundennachweis mit allen Tagen.
+ */
 function drawStundenzettel(
   doc: jsPDF,
   schedule: Schedule,
@@ -479,11 +691,13 @@ function drawStundenzettel(
   dates: string[],
   periodLabel: string,
 ): void {
+  paintAbrechnung(jsPdfPainter(doc), schedule, employee, dates, periodLabel);
+  doc.addPage();
   paintStundenzettel(jsPdfPainter(doc), schedule, employee, dates, periodLabel);
 }
 
 /**
- * Baut die Stundenzettel-PDF: eine A4-Seite je Mitarbeiter.
+ * Baut die Stundenzettel-PDF: zwei A4-Seiten je Mitarbeiter (Abrechnungsformular + Stundennachweis).
  * `dates` fehlt => ganzer Monat; `periodLabel` fehlt => Monat/Jahr.
  *
  * async + kurzer Yield je Seite: der Fortschritt (X/N) kann gerendert werden
@@ -653,13 +867,29 @@ function drawGrid(
 }
 
 /** Eine Schicht als zwei Textzeilen: Zeitspanne und Stunden/Pause. */
-function shiftLines(shift: Shift | undefined, closed: boolean): string[] {
-  if (!shift) return [closed ? "-" : "frei"];
-  const hours = minutesToDecimalHours(shift.paidMinutes, 2).replace(",00", "");
-  return [
-    `${minutesToTime(shift.startMinutes)}-${minutesToTime(shift.endMinutes)}`,
-    `${hours}h${shift.pauseMinutes > 0 ? ` · P${shift.pauseMinutes}` : ""}`,
-  ];
+/**
+ * Zellinhalt für einen Tag. Ein Tag kann ZWEI Dienste haben (mittags und
+ * abends) – beide müssen auf den Aushang, sonst fehlt die halbe Schicht.
+ *
+ * Die Zeilenhöhe im Gitter ist fest, deshalb:
+ *  - ein Dienst  -> Uhrzeit + Stunden (zwei Zeilen),
+ *  - zwei Dienste -> beide Uhrzeiten (zwei Zeilen); die Stundenzahl kommt nur
+ *    dazu, wo das Blatt Platz für eine dritte Zeile hat (withHours).
+ */
+function shiftLines(shifts: Shift[], closed: boolean, withHours = false): string[] {
+  if (shifts.length === 0) return [closed ? "-" : "frei"];
+  const sorted = [...shifts].sort((a, b) => a.startMinutes - b.startMinutes);
+  const stunden = (minutes: number) => minutesToDecimalHours(minutes, 2).replace(",00", "");
+  if (sorted.length === 1) {
+    const shift = sorted[0];
+    return [
+      `${minutesToTime(shift.startMinutes)}-${minutesToTime(shift.endMinutes)}`,
+      `${stunden(shift.paidMinutes)}h${shift.pauseMinutes > 0 ? ` · P${shift.pauseMinutes}` : ""}`,
+    ];
+  }
+  const zeiten = sorted.map((s) => `${minutesToTime(s.startMinutes)}-${minutesToTime(s.endMinutes)}`);
+  const gesamt = sorted.reduce((sum, s) => sum + s.paidMinutes, 0);
+  return withHours ? [...zeiten, `${stunden(gesamt)}h`] : zeiten;
 }
 
 /**
@@ -713,8 +943,12 @@ function drawDienstplan(
     opts.employeeIds && opts.employeeIds.length
       ? schedule.employees.filter((e) => opts.employeeIds!.includes(e.id))
       : schedule.employees;
-  const byKey = new Map<string, Shift>();
-  for (const s of schedule.shifts) byKey.set(`${s.employeeId}#${s.date}`, s);
+  // Eine LISTE je Person und Tag – an geteilten Tagen sind es zwei Dienste.
+  const byKey = new Map<string, Shift[]>();
+  for (const s of schedule.shifts) {
+    const key = `${s.employeeId}#${s.date}`;
+    byKey.set(key, [...(byKey.get(key) ?? []), s]);
+  }
 
   const holidays = publicHolidays(schedule.year);
   const holidayNames = publicHolidayNames(schedule.year);
@@ -745,13 +979,14 @@ function drawDienstplan(
       "Summe",
     ];
     const body: GridRow[] = employees.map((employee) => {
-      const own = opts.dates.map((d) => byKey.get(`${employee.id}#${d}`));
-      const total = own.reduce((sum, s) => sum + (s?.paidMinutes ?? 0), 0);
+      const own = opts.dates.map((d) => byKey.get(`${employee.id}#${d}`) ?? []);
+      const total = own.reduce((sum, list) => sum + list.reduce((a, s) => a + s.paidMinutes, 0), 0);
       return {
         shaded: false,
         cells: [
           [employee.name],
-          ...opts.dates.map((d, i) => shiftLines(own[i], closedOn(d))),
+          // Hochformat: hier ist Platz für die dritte Zeile mit den Stunden.
+          ...opts.dates.map((d, i) => shiftLines(own[i], closedOn(d), true)),
           [`${minutesToDecimalHours(total, 2).replace(",00", "")}h`],
         ],
       };
@@ -787,7 +1022,7 @@ function drawDienstplan(
         cells: [
           [format(parseIsoDate(d), "dd.MM.yyyy")],
           [WEEKDAY_LABELS_DE[weekdayKeyOf(parseIsoDate(d))] + (holiday ? ` · ${holiday}` : "")],
-          ...employees.map((e) => shiftLines(byKey.get(`${e.id}#${d}`), closed)),
+          ...employees.map((e) => shiftLines(byKey.get(`${e.id}#${d}`) ?? [], closed)),
         ],
       };
     });
