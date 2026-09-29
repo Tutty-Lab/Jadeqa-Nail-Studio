@@ -257,7 +257,7 @@ function dayCost(shifts: Shift[], blocks: DayBlocks, weekday: WeekdayKey, target
   }
   // Leerstand zählt EINMAL je halber Stunde, nicht je Fenster. Sonst wäre ein
   // Loch um 13:30 (Öffnungszeit UND Hauptzeit) doppelt so teuer wie eines um
-  // 09:30 (nur Öffnungszeit), und der Planer schiebt das Loch lieber auf den
+  // 09:00 (nur Öffnungszeit), und der Planer schiebt das Loch lieber auf den
   // Ladenschluss- oder Öffnungsrand. Leer ist leer.
   for (const slot of mussBesetzt) if (counts[slot] === 0) cost += SLOT * 4500;
   for (let i = 0; i < counts.length; i++) cost += (counts[i] - model.targets[i]) ** 2 * SLOT_DEVIATION_COST;

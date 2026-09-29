@@ -150,7 +150,7 @@ export function SettingsTab({ store }: { store: UseScheduleReturn }) {
   );
   const [ovDate, setOvDate] = useState<string>("");
   const [ovMode, setOvMode] = useState<"closed" | "custom">("closed");
-  const [ovStart, setOvStart] = useState("09:30");
+  const [ovStart, setOvStart] = useState("09:00");
   const [ovEnd, setOvEnd] = useState("15:00");
   const [ovNote, setOvNote] = useState("");
 

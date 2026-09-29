@@ -1,6 +1,6 @@
 // ============================================================================
 // Öffnungszeiten je Wochentag. Das Studio hat DURCHGEHEND offen (kein Block in
-// der Mitte): Montag bis Samstag 09:30–20:00. Sonntags und an gesetzlichen
+// der Mitte): Montag bis Samstag 09:00–19:00. Sonntags und an gesetzlichen
 // Feiertagen ist zu.
 // ============================================================================
 
@@ -74,8 +74,8 @@ const CLOSED_SUNDAY: Record<WeekdayKey, boolean> = {
   sunday: true,
 };
 
-// J'ADEQA Nagelstudio: T2–T7 09:30–20:00, CN nghỉ.
-const STUDIO_TAG: DayBlocks = [w(9 * 60 + 30, 20 * 60)];
+// J'ADEQA Nagelstudio: T2–T7 09:00–19:00, CN nghỉ.
+const STUDIO_TAG: DayBlocks = [w(9 * 60, 19 * 60)];
 
 export const JADEQA_WORK_HOURS: WorkHoursConfig = {
   perWeekday: {

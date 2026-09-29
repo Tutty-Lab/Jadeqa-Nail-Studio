@@ -1,6 +1,6 @@
 // ============================================================================
 // Die Vorgaben des Betriebs für J'ADEQA Nagelstudio:
-//   - offen Mo–Sa 09:30–20:00; Sonntag und Feiertage (Rheinland-Pfalz) zu
+//   - offen Mo–Sa 09:00–19:00; Sonntag und Feiertage (Rheinland-Pfalz) zu
 //   - die ganze Öffnungszeit ist besetzt, nie null Personen
 //   - Hauptzeit Mo–Fr 15:00–19:00 und Sa ab 11:00: zwei Personen
 //   - höchstens 8 h bezahlt am Tag, höchstens 6 Tage am Stück
@@ -67,10 +67,10 @@ describe("Öffnungszeiten", () => {
     }
   });
 
-  it("Mo–Sa 09:30–20:00, Sonntag und Feiertage geschlossen", () => {
+  it("Mo–Sa 09:00–19:00, Sonntag und Feiertage geschlossen", () => {
     const hours = storeById("jadeqa").workHours;
     for (const key of ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const) {
-      expect(hours.perWeekday[key]).toEqual([{ startMinutes: 9 * 60 + 30, endMinutes: 20 * 60 }]);
+      expect(hours.perWeekday[key]).toEqual([{ startMinutes: 9 * 60, endMinutes: 19 * 60 }]);
       expect(hours.closedWeekdays[key]).toBe(false);
     }
     expect(hours.closedWeekdays.sunday).toBe(true);

@@ -88,11 +88,10 @@ const LINE: [number, number, number] = [71, 85, 105]; // slate-600
 const GRID: [number, number, number] = [148, 163, 184]; // slate-400
 const HEAD_FILL: [number, number, number] = [241, 245, 249]; // slate-100
 const SHADE_FILL: [number, number, number] = [248, 250, 252]; // slate-50
-const DIVIDER: [number, number, number] = [203, 213, 225]; // slate-300
 
 const MARGIN = 14; // mm
 
-function monthLabelDe(year: number, month: number): string {
+export function monthLabelDe(year: number, month: number): string {
   return `${MONTH_NAMES_DE[month - 1]} ${year}`;
 }
 
@@ -132,43 +131,6 @@ function drawHeader(
   doc.setLineWidth(0.5);
   doc.line(MARGIN, y, pageW - MARGIN, y);
   return y + 4;
-}
-
-/** Zweispaltiger Info-Block; gibt das Y darunter zurück. */
-function drawInfoBlock(
-  doc: jsPDF,
-  pairs: Array<[string, string | null]>, // null = Feld zum Ausfüllen von Hand
-  startY: number,
-): number {
-  const pageW = doc.internal.pageSize.getWidth();
-  const colX = [MARGIN, pageW / 2 + 4];
-  const labelW = 32;
-  let y = startY;
-  doc.setFontSize(8);
-
-  for (let i = 0; i < pairs.length; i += 2) {
-    for (let c = 0; c < 2; c++) {
-      const pair = pairs[i + c];
-      if (!pair) continue;
-      const [label, value] = pair;
-      const x = colX[c];
-      doc.setFont("helvetica", "normal");
-      doc.setTextColor(...MUTED);
-      doc.text(`${T(label)}:`, x, y);
-      if (value === null) {
-        // Leere Schreiblinie – wird auf dem Papier von Hand ergänzt.
-        doc.setDrawColor(...GRID);
-        doc.setLineWidth(0.2);
-        doc.line(x + labelW, y, x + labelW + 45, y);
-      } else {
-        doc.setFont("helvetica", "bold");
-        doc.setTextColor(...INK);
-        doc.text(T(value), x + labelW, y);
-      }
-    }
-    y += 5;
-  }
-  return y + 1;
 }
 
 /** Unterschriftszeilen am Seitenende. */
@@ -219,12 +181,15 @@ function stundenzettelRowsFor(
   const rows: DayRow[] = dates.map((d) => {
     const dienste = byDate.get(d) ?? [];
     totalMinutes += dienste.reduce((a, s) => a + s.paidMinutes, 0);
-    const wd = WEEKDAY_LABELS_DE[weekdayKeyOf(parseIsoDate(d))];
+    const wdKey = weekdayKeyOf(parseIsoDate(d));
+    const wd = WEEKDAY_LABELS_DE[wdKey];
     const holiday = holidayNames.get(d);
     const closed = closedByDate.get(d);
     const isWeekend = wd === "Samstag" || wd === "Sonntag";
     const shaded = Boolean(isWeekend || holiday || closed);
-    const datum = `${format(parseIsoDate(d), "dd.MM.yyyy")}\n${wd}`;
+    // Datum + Wochentag auf EINER Zeile (wie im DATEV-Formular) – so bleibt jede
+    // Tageszeile einzeilig und der ganze Monat passt sicher auf eine Seite.
+    const datum = `${format(parseIsoDate(d), "dd.MM.yyyy")}  ${WEEKDAY_SHORT_DE[wdKey]}`;
 
     if (dienste.length === 0) {
       const bemerkung = closed
@@ -250,127 +215,263 @@ function stundenzettelRowsFor(
   return { rows, totalMinutes };
 }
 
-// Spalten des Stundenzettels: x-Position, Breite, Ausrichtung. Rechte Kante 196.
-const SZ_COLS: Array<{ x: number; w: number; align: "left" | "center" }> = [
-  { x: 14, w: 30, align: "left" }, // Datum / Wochentag
-  { x: 44, w: 26, align: "center" }, // Arbeitsbeginn
-  { x: 70, w: 26, align: "center" }, // Arbeitsende
-  { x: 96, w: 20, align: "center" }, // Pause
-  { x: 116, w: 26, align: "center" }, // Arbeitszeit
-  { x: 142, w: 54, align: "left" }, // Bemerkung
-];
-const SZ_LEFT = 14;
-const SZ_RIGHT = 196;
-const SZ_HEAD = ["Datum / Wochentag", "Arbeitsbeginn", "Arbeitsende", "Pause", "Arbeitszeit", "Bemerkung"];
+// ── Layout nach dem Muster der Lohnabrechnung (Brutto/Netto-Bezüge) ────────
+// Nachbau des Aufbaus der Abrechnungen, die der Betrieb vom Steuerbüro bekommt:
+// kleine Helvetica-Beschriftungen mit Unterstrich + kurzen Trennstrichen,
+// Werte in Courier, Firmenzeile "Name*Straße*PLZ Ort", Anschriftenblock,
+// breite Positionsspalte links und Summenspalte rechts. Inhalt ist die
+// ARBEITSZEIT – ohne Fremd-Logo, ohne Formular-/Mandantennummern.
+//
+// Gezeichnet wird über einen kleinen "Painter": die PDF nutzt jsPDF, die
+// Bildschirm-Vorschau (StundenzettelPage) nutzt SVG – mit DENSELBEN
+// Koordinaten, damit Vorschau und PDF nie auseinanderlaufen.
+const P_L = 14; // linke Kante
+const P_R = 198; // rechte Kante
+const P_SPLIT = 164; // Beginn der rechten Summenspalte
+const P_TOPR = 139; // Beginn des rechten Kopfblocks
+export const SZ_PAGE_W = 210;
+export const SZ_PAGE_H = 297;
 
-/**
- * Zeichnet die Stundenzettel-Tabelle VON HAND (jsPDF-Primitive, ohne autoTable).
- *
- * Warum von Hand: die eingebundene autoTable-Version berechnet zwar alle Zeilen,
- * zeichnet im minifizierten Bundle aber nur einen Teil (ein ganzer Monat wurde
- * ab ~Tag 23 abgeschnitten). Selbst gezeichnet haben wir volle Kontrolle über die
- * Zeilenhöhe – ein ganzer Monat passt garantiert auf EINE Seite – und es gibt
- * keine Fremd-Bibliothek mehr, die Zeilen verschluckt.
- */
-function drawStundenzettelTable(
-  doc: jsPDF,
-  startY: number,
-  rows: DayRow[],
-  totalMinutes: number,
-): void {
-  const FS = 6.5; // Schriftgröße (pt)
-  const LH = 2.5; // Höhe je Textzeile (mm)
-  const PADV = 0.7; // Innenabstand oben/unten (mm)
-  const headH = LH + 2 * PADV;
-  const footH = LH + 2 * PADV;
+/** ISO-Datum -> ddMMyy (wie "Eintritt 011124" in der Abrechnung). */
+const dShort = (iso?: string): string => (iso ? format(parseIsoDate(iso), "ddMMyy") : "");
+/** Stunden mit deutschem Dezimalkomma (leer bei null). */
+const commaHours = (h?: number): string =>
+  h == null ? "" : h.toLocaleString("de-DE", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
-  doc.setFontSize(FS);
-  doc.setFont("helvetica", "normal");
+export type SzAlign = "left" | "right" | "center";
 
-  // Zellinhalte in Zeilen zerlegen (Bemerkung ggf. auf Spaltenbreite umbrechen).
-  const bodyLines = rows.map((r) =>
-    r.cells.map((c, ci) => {
-      const parts = T(c).split("\n");
-      if (ci === 5 && T(c)) {
-        return parts.flatMap((p) => (p ? (doc.splitTextToSize(p, SZ_COLS[ci].w - 3) as string[]) : [""]));
-      }
-      return parts;
-    }),
-  );
-  const rowMax = bodyLines.map((cells) => Math.max(1, ...cells.map((l) => l.length)));
-  const rowH = rowMax.map((n) => n * LH + 2 * PADV);
-
-  const drawCellText = (
+/** Zeichenfläche in mm (A4 hochkant); `fs` in pt, `y` = Grundlinie. */
+export interface SzPainter {
+  text(
     text: string,
-    ci: number,
-    yBaseline: number,
-    style: "normal" | "bold",
-    color: [number, number, number],
-  ) => {
-    if (!text) return;
-    const col = SZ_COLS[ci];
-    doc.setFont("helvetica", style);
-    doc.setTextColor(...color);
-    const tx = col.align === "center" ? col.x + col.w / 2 : col.x + 1.5;
-    doc.text(text, tx, yBaseline, { align: col.align });
-  };
-
-  // ---- Kopfzeile ----
-  let y = startY;
-  doc.setFillColor(...HEAD_FILL);
-  doc.rect(SZ_LEFT, y, SZ_RIGHT - SZ_LEFT, headH, "F");
-  SZ_HEAD.forEach((h, ci) => drawCellText(h, ci, y + PADV + LH * 0.72, "bold", INK));
-  y += headH;
-
-  // ---- Datenzeilen ----
-  const rowTops: number[] = [];
-  rows.forEach((r, ri) => {
-    const h = rowH[ri];
-    rowTops.push(y);
-    if (r.shaded) {
-      doc.setFillColor(...SHADE_FILL);
-      doc.rect(SZ_LEFT, y, SZ_RIGHT - SZ_LEFT, h, "F");
-    }
-    // Ca sáng/ca chiều: dünne Trennlinie zwischen den Diensten (Spalten 1–4).
-    if (r.shiftCount >= 2) {
-      doc.setDrawColor(...DIVIDER);
-      doc.setLineWidth(0.2);
-      for (let k = 1; k < r.shiftCount; k++) {
-        const yy = y + (h * k) / r.shiftCount;
-        doc.line(SZ_COLS[1].x, yy, SZ_COLS[4].x + SZ_COLS[4].w, yy);
-      }
-    }
-    bodyLines[ri].forEach((lines, ci) => {
-      const offset = (rowMax[ri] - lines.length) / 2; // vertikal zentrieren
-      lines.forEach((ln, j) => {
-        const yBase = y + PADV + (offset + j) * LH + LH * 0.72;
-        if (ci === 0 && j === 0) drawCellText(ln, ci, yBase, "bold", INK);
-        else if (ci === 0 || ci === 5) drawCellText(ln, ci, yBase, "normal", MUTED);
-        else drawCellText(ln, ci, yBase, "normal", INK);
-      });
-    });
-    y += h;
-  });
-
-  // ---- Fußzeile (Gesamtstunden) ----
-  const footTop = y;
-  doc.setFillColor(...HEAD_FILL);
-  doc.rect(SZ_LEFT, y, SZ_RIGHT - SZ_LEFT, footH, "F");
-  drawCellText("Gesamtstunden", 0, y + PADV + LH * 0.72, "bold", INK);
-  drawCellText(minutesToDecimalHours(totalMinutes), 4, y + PADV + LH * 0.72, "bold", INK);
-  y += footH;
-  const tableBottom = y;
-
-  // ---- Gitter (nach den Füllungen, damit die Linien oben liegen) ----
-  doc.setDrawColor(...GRID);
-  doc.setLineWidth(0.2);
-  for (const hy of [startY, ...rowTops, footTop, tableBottom]) doc.line(SZ_LEFT, hy, SZ_RIGHT, hy);
-  for (const vx of [SZ_LEFT, ...SZ_COLS.slice(1).map((c) => c.x), SZ_RIGHT]) {
-    doc.line(vx, startY, vx, tableBottom);
-  }
+    x: number,
+    y: number,
+    o: { font: "helvetica" | "courier"; bold: boolean; fs: number; align: SzAlign },
+  ): void;
+  /** `gray` 0 = schwarz … 255 = weiß. */
+  line(x0: number, y0: number, x1: number, y1: number, width: number, gray?: number): void;
 }
 
-/** Zeichnet EINEN Stundenzettel auf die aktuelle Seite. */
+function jsPdfPainter(doc: jsPDF): SzPainter {
+  return {
+    text(text, x, y, o) {
+      doc.setFont(o.font, o.bold ? "bold" : "normal");
+      doc.setFontSize(o.fs);
+      doc.setTextColor(0, 0, 0);
+      doc.text(text, x, y, { align: o.align });
+    },
+    line(x0, y0, x1, y1, width, gray = 0) {
+      doc.setDrawColor(gray, gray, gray);
+      doc.setLineWidth(width);
+      doc.line(x0, y0, x1, y1);
+    },
+  };
+}
+
+type TextOpts = { bold?: boolean; align?: SzAlign; fs?: number };
+
+/** Kleine Feldbeschriftung (Helvetica). */
+function label(p: SzPainter, text: string, x: number, y: number, opts: TextOpts = {}): void {
+  p.text(T(text), x, y, { font: "helvetica", bold: !!opts.bold, fs: opts.fs ?? 5.6, align: opts.align ?? "left" });
+}
+
+/** Feldwert (Courier, standardmäßig fett – wie der Druck der Abrechnung). */
+function value(p: SzPainter, text: string, x: number, y: number, opts: TextOpts = {}): void {
+  p.text(T(text), x, y, { font: "courier", bold: opts.bold !== false, fs: opts.fs ?? 9.5, align: opts.align ?? "left" });
+}
+
+function hline(p: SzPainter, x0: number, x1: number, y: number, w = 0.2): void {
+  p.line(x0, y, x1, y, w);
+}
+
+function vline(p: SzPainter, x: number, y0: number, y1: number, w = 0.2): void {
+  p.line(x, y0, x, y1, w);
+}
+
+type Field = { x: number; w: number; label: string; value?: string; align?: SzAlign };
+
+/**
+ * Eine Beschriftungszeile wie in der Abrechnung: Labels mit Linie darunter,
+ * darunter der Wert und eine zweite Linie mit kurzen Trennstrichen.
+ */
+function labelRow(p: SzPainter, y: number, fields: Field[], lineTo?: number): void {
+  const last = fields[fields.length - 1];
+  const x0 = fields[0].x;
+  const x1 = lineTo ?? last.x + last.w;
+  fields.forEach((f, i) => {
+    if (i > 0) vline(p, f.x, y - 2.6, y + 1, 0.15);
+    label(p, f.label, f.x + 0.6, y);
+    if (f.value) {
+      const align = f.align ?? "left";
+      const vx = align === "right" ? f.x + f.w - 0.8 : align === "center" ? f.x + f.w / 2 : f.x + 0.3;
+      value(p, f.value, vx, y + 4.6, { align });
+    }
+  });
+  hline(p, x0, x1, y + 1, 0.2);
+  hline(p, x0, x1, y + 6.2, 0.2);
+  fields.forEach((f, i) => {
+    if (i > 0) vline(p, f.x, y + 5.3, y + 6.2, 0.15);
+  });
+}
+
+/**
+ * Zeichnet EINEN Stundenzettel (eine A4-Seite) – Aufbau wie die
+ * Lohnabrechnung: Kopf, Feldzeilen, Firmenzeile, Anschrift, Positionsteil mit
+ * Summenspalte, Zusammenfassung, Unterschriften.
+ */
+export function paintStundenzettel(
+  p: SzPainter,
+  schedule: Schedule,
+  employee: Employee,
+  dates: string[],
+  periodLabel: string,
+): void {
+  const pageH = SZ_PAGE_H;
+  const { rows, totalMinutes } = stundenzettelRowsFor(schedule, employee, dates);
+  const workDays = rows.filter((r) => r.shiftCount > 0).length;
+
+  // ── Kopf ────────────────────────────────────────────────────────────────
+  value(p, format(new Date(), "dd.MM.yyyy"), P_R - 12, 16, { fs: 10, align: "right" });
+  label(p, "Blatt:", P_R - 9, 16, { fs: 6 });
+  value(p, "1", P_R, 16, { fs: 10, align: "right" });
+
+  label(p, "Arbeitszeitnachweis", P_L, 17, { bold: true, fs: 11.5 });
+  value(p, `für ${periodLabel}`, P_L + 62, 17, { fs: 10.5 });
+
+  // ── Feldzeilen links ────────────────────────────────────────────────────
+  labelRow(
+    p,
+    20.5,
+    [
+      { x: P_L, w: 20, label: "Personal-Nr." },
+      { x: P_L + 20, w: 20, label: "Geburtsdatum" },
+      { x: P_L + 40, w: 32, label: "Beschäftigungsart", value: employmentLabelDe(employee.employmentType) },
+      { x: P_L + 72, w: 20, label: "Wöch.Arb.Zt.", value: commaHours(employee.weeklyHours), align: "right" },
+      { x: P_L + 92, w: 15, label: "Eintritt", value: dShort(employee.startDate) },
+      { x: P_L + 107, w: 14, label: "Austritt", value: dShort(employee.endDate) },
+    ],
+    P_TOPR - 4,
+  );
+  labelRow(
+    p,
+    30,
+    [
+      { x: P_L, w: 60, label: "SV-Nummer" },
+      { x: P_L + 60, w: 61, label: "Krankenkasse" },
+    ],
+    P_TOPR - 4,
+  );
+
+  // ── Feldblock rechts (Tage / Stunden) ───────────────────────────────────
+  labelRow(p, 20.5, [
+    { x: P_TOPR, w: 15, label: "Arb. Tage", value: String(workDays), align: "right" },
+    { x: P_TOPR + 15, w: 15, label: "Urlaub Tg." },
+    { x: P_TOPR + 30, w: 15, label: "Krankh. Tg." },
+    { x: P_TOPR + 45, w: 14, label: "Fehlz. Tg." },
+  ]);
+  labelRow(p, 30, [
+    { x: P_TOPR, w: 15, label: "Ist Std.", value: minutesToDecimalHours(totalMinutes), align: "right" },
+    { x: P_TOPR + 15, w: 15, label: "Urlaub Std." },
+    { x: P_TOPR + 30, w: 15, label: "Krankh. Std." },
+    { x: P_TOPR + 45, w: 14, label: "Überstd." },
+  ]);
+
+  // ── Firmenzeile + Pers.-Nr. ─────────────────────────────────────────────
+  const firma = [schedule.companyName, ...(schedule.address ? schedule.address.split(/,\s*/) : [])].join("*");
+  value(p, firma, P_L + 4, 45, { fs: 5 });
+  value(p, "*Pers.-Nr. ______*", P_L + 30, 53, { fs: 6.5 });
+
+  label(p, "Hinweise zum Nachweis", P_TOPR - 4, 50, { bold: true });
+  hline(p, P_TOPR - 4, P_R, 51.5, 0.35);
+  value(p, "Pause unbezahlt, Zeiten in Std.", P_TOPR - 4, 56, { fs: 7, bold: false });
+
+  // ── Anschriftenblock (Anschrift von Hand) ───────────────────────────────
+  value(p, employee.name, P_L + 6, 68, { fs: 11 });
+  p.line(P_L + 6, 73.5, P_L + 70, 73.5, 0.15, 150);
+  p.line(P_L + 6, 78.5, P_L + 70, 78.5, 0.15, 150);
+
+  // ── Positionsteil „Arbeitszeiten" mit Summenspalte ──────────────────────
+  const top = 92;
+  label(p, "Arbeitszeiten", P_L, top - 2, { bold: true });
+  const cols = [
+    { x: P_L, label: "Datum" },
+    { x: P_L + 32, label: "Beginn" },
+    { x: P_L + 54, label: "Ende" },
+    { x: P_L + 76, label: "Pause" },
+    { x: P_L + 98, label: "Bemerkung" },
+  ];
+  hline(p, P_L, P_SPLIT - 3, top - 1, 0.35);
+  cols.forEach((c, i) => {
+    if (i > 0) vline(p, c.x, top - 1, top + 2.3, 0.15);
+    label(p, c.label, c.x + 0.6, top + 1.4);
+  });
+  hline(p, P_SPLIT, P_R, top - 1, 0.35);
+  label(p, "Stunden", P_R - 0.5, top + 1.4, { bold: true, align: "right" });
+
+  const bodyTop = top + 3;
+  const bodyBottom = pageH - 68;
+  const lineCount = rows.reduce((a, r) => a + Math.max(1, r.shiftCount), 0);
+  const LH = Math.min(4.2, (bodyBottom - bodyTop - 2) / lineCount);
+  const FS = Math.min(8.5, LH * 2.2);
+  let y = bodyTop + LH;
+  for (const r of rows) {
+    const [datum, beginn, ende, pause, stunden, bemerkung] = r.cells.map((c) => T(c).split("\n"));
+    const n = Math.max(1, r.shiftCount);
+    for (let k = 0; k < n; k++) {
+      if (k === 0) value(p, datum[0], P_L, y, { fs: FS, bold: r.shiftCount > 0 });
+      if (r.shiftCount > 0) {
+        value(p, beginn[k] ?? "", cols[1].x + 1, y, { fs: FS, bold: false });
+        value(p, ende[k] ?? "", cols[2].x + 1, y, { fs: FS, bold: false });
+        value(p, pause[k] ?? "", cols[3].x + 1, y, { fs: FS, bold: false });
+        value(p, stunden[k] ?? "", P_R - 0.5, y, { fs: FS, align: "right" });
+      }
+      if (k === 0 && bemerkung[0]) {
+        value(p, bemerkung[0].slice(0, 32), cols[4].x + 1, y, { fs: FS * 0.85, bold: false });
+      }
+      y += LH;
+    }
+  }
+  vline(p, P_SPLIT - 1.5, top - 1, bodyBottom + 10, 0.35);
+
+  // ── Summe rechts (Stelle von „Gesamt-Brutto") ───────────────────────────
+  hline(p, P_SPLIT, P_R, bodyBottom, 0.35);
+  label(p, "Gesamtstunden", P_R - 0.5, bodyBottom + 2.6, { bold: true, align: "right" });
+  value(p, minutesToDecimalHours(totalMinutes), P_R - 0.5, bodyBottom + 7.5, { fs: 11, align: "right" });
+  hline(p, P_L, P_R, bodyBottom + 10, 0.35);
+
+  // ── Zusammenfassung links (Stelle der „Verdienstbescheinigung") ─────────
+  let sy = bodyBottom + 15;
+  label(p, "Zusammenfassung", P_L, sy, { bold: true });
+  hline(p, P_L, P_L + 90, sy + 1, 0.35);
+  const summary: Array<[string, string]> = [
+    ["Arbeitstage", String(workDays)],
+    ["Ist-Stunden", minutesToDecimalHours(totalMinutes)],
+    ["Soll-Stunden", ""],
+    ["Differenz", ""],
+  ];
+  for (const [l, v] of summary) {
+    sy += 4.6;
+    label(p, l, P_L, sy, { fs: 6 });
+    if (v) value(p, v, P_L + 55, sy, { fs: 9.5, align: "right" });
+  }
+  vline(p, P_L + 58, bodyBottom + 16, sy + 1.5, 0.15);
+  hline(p, P_L, P_L + 90, sy + 1.5, 0.35);
+
+  // ── Unterschriften (Stelle von „Betrag erhalten") ───────────────────────
+  const sigY = pageH - 17;
+  value(p, "Bestätigt:", P_L + 8, sigY - 5, { fs: 10.5 });
+  hline(p, P_L, P_L + 85, sigY, 0.35);
+  hline(p, P_L + 95, P_R, sigY, 0.35);
+  label(p, "Unterschrift Mitarbeiter / Datum", P_L, sigY + 2.8, { fs: 6 });
+  label(p, "Unterschrift Arbeitgeber / Datum", P_L + 95, sigY + 2.8, { fs: 6 });
+
+  label(p, "- Aufzeichnung der Arbeitszeit nach § 17 Abs. 1 MiLoG -", (P_L + P_R) / 2, pageH - 7, {
+    fs: 5.2,
+    align: "center",
+  });
+}
+
+/** Zeichnet EINEN Stundenzettel auf die aktuelle PDF-Seite. */
 function drawStundenzettel(
   doc: jsPDF,
   schedule: Schedule,
@@ -378,59 +479,7 @@ function drawStundenzettel(
   dates: string[],
   periodLabel: string,
 ): void {
-  const startY = drawHeader(doc, "Stundenaufzeichnung", schedule, periodLabel);
-  const infoY = drawInfoBlock(
-    doc,
-    [
-      ["Firmenname", schedule.companyName || "—"],
-      ["Beschäftigungsart", employmentLabelDe(employee.employmentType)],
-      ["Mitarbeiter", employee.name],
-      ["Monat", MONTH_NAMES_DE[schedule.month - 1]],
-      ["Sollstunden", null], // von Hand einzutragen
-      ["Jahr", String(schedule.year)],
-    ],
-    startY,
-  );
-
-  const { rows, totalMinutes } = stundenzettelRowsFor(schedule, employee, dates);
-
-  drawStundenzettelTable(doc, infoY, rows, totalMinutes);
-
-  // Zusammenfassung + Unterschriften: FESTE Positionen im reservierten Band am
-  // Seitenende – unabhängig davon, wo die Tabelle endet (keine Kollision mehr).
-  const pageH = doc.internal.pageSize.getHeight();
-  const pageW = doc.internal.pageSize.getWidth();
-  const summaryY = pageH - 30;
-  const col3 = (pageW - 2 * MARGIN) / 3;
-
-  const summary: Array<[string, string | null]> = [
-    ["Gesamtstunden", `${minutesToDecimalHours(totalMinutes)} h`],
-    ["Sollstunden", null],
-    ["Differenz", null],
-  ];
-  summary.forEach(([label, value], i) => {
-    const x = MARGIN + i * col3;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(...MUTED);
-    doc.text(T(label), x, summaryY);
-    if (value === null) {
-      doc.setDrawColor(...GRID);
-      doc.setLineWidth(0.2);
-      doc.line(x, summaryY + 5, x + 26, summaryY + 5);
-    } else {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(...INK);
-      doc.text(T(value), x, summaryY + 5);
-    }
-  });
-
-  drawSignatures(
-    doc,
-    ["Unterschrift Mitarbeiter", "Unterschrift Arbeitgeber", "Datum"],
-    pageH - 14,
-  );
+  paintStundenzettel(jsPdfPainter(doc), schedule, employee, dates, periodLabel);
 }
 
 /**

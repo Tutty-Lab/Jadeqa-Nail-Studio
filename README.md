@@ -6,7 +6,7 @@ Passwort, eine Zeile in Supabase (`store_id = "jadeqa"`).
 
 ## Öffnungszeiten
 
-- **Mo–Sa 09:30–20:00**, durchgehend (keine Mittagspause des Ladens).
+- **Mo–Sa 09:00–19:00**, durchgehend (keine Mittagspause des Ladens).
 - **Sonntag geschlossen**, ebenso an **gesetzlichen Feiertagen**
   (Rheinland-Pfalz, 11 Tage: mit Fronleichnam und Allerheiligen, ohne
   Reformationstag – `src/lib/holidays.ts`).
@@ -59,7 +59,7 @@ Ohne „Wöch.Arb.Zt." auf der Abrechnung: **Brutto ÷ Mindestlohn**
 Zwei Dinge muss der Betrieb bestätigen:
 
 1. **Die Inhaberin** steht mit Namen „Chu tiem" und 169 h im Plan. Sie hat
-   keine Lohnabrechnung; ohne sie reichen die Verträge nicht, um 09:30–20:00 an
+   keine Lohnabrechnung; ohne sie reichen die Verträge nicht, um 09:00–19:00 an
    26 Tagen zu besetzen. Name und Stunden im Tab „Nhân viên" anpassen.
 2. **Geänderte Stunden:** Quynh Nhu Nguyen hatte 117 h (09/2025), dann
    27 h/Woche, seit 02/2026 19,5 h/Woche. Hinterlegt ist der letzte Stand – für
@@ -73,19 +73,17 @@ Gerechnet über alle 11 Monate mit Lohnabrechnung (05/2025–03/2026):
 |---|---|
 | Verträge | eingehalten, Abweichung höchstens eine halbe Stunde |
 | Arbeitsrecht (8 h, 6 Tage, Pausen, Raster) | keine Verstöße |
-| Laden unbesetzt | **eine halbe Stunde im ganzen Zeitraum** (03.05.2025, siehe unten) |
-| Hauptzeit unterbesetzt | 227 halbe Stunden, davon 147 allein im August 2025 |
+| Laden unbesetzt | **keine einzige halbe Stunde** im ganzen Zeitraum |
+| Hauptzeit unterbesetzt | 210 halbe Stunden, davon 130 allein im August 2025 |
 
 Der August 2025 ist der Engpass: da hatte das Studio nur **drei Verträge**
-(Inhaberin, 70,2 h, 87,4 h). Die Stunden reichen gerade für die Abdeckung, aber
-nicht für zwei Personen in der Hauptzeit. Ab November 2025 (fünf Verträge) ist
-der Plan sauber, 01–03/2026 ohne jede Lücke.
+(Inhaberin, 70,2 h, 87,4 h). Die Stunden reichen für die volle Abdeckung der
+Öffnungszeit, aber nicht für zwei Personen in der Hauptzeit. Der Rest verteilt
+sich auf 05/2025 (43) und 07/2025 (24) – ebenfalls schwach besetzte Monate –
+sowie einzelne halbe Stunden in 09/2025 (5) und 10/2025 (8). Ab November 2025
+(fünf Verträge) ist der Plan sauber, 11/2025–03/2026 ohne jede Lücke.
 
-Die eine unbesetzte halbe Stunde am Samstag, 03.05.2025 (19:30–20:00), ist
-rechnerisch nicht zu vermeiden: an dem Tag sind nur zwei Personen da, die
-8-Stunden-Schicht braucht ihre Pause, und § 4 ArbZG lässt sie erst nach vier
-und spätestens nach sechs Stunden zu – in diesem Fenster ist die zweite Person
-schon gegangen.
+Nachgerechnet mit `npx vite-node scripts/coverage-check.mts`.
 
 ## PDF
 

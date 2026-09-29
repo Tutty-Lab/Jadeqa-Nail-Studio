@@ -63,7 +63,7 @@ export function jadeqaEmployees(): Employee[] {
   return [
     {
       // ANNAHME: Inhaberin, immer im Laden. Ohne sie reichen die Verträge nicht,
-      // um 09:30–20:00 an 26 Tagen zu besetzen.
+      // um 09:00–19:00 an 26 Tagen zu besetzen.
       //
       // Als EINZIGE ohne Fünf-Tage-Grenze: 169 h passen in einem kurzen Monat
       // (Februar, 24 offene Tage) sonst nicht in fünf Tage je Woche – 20 Tage

@@ -2,7 +2,7 @@
 // Unterbesetzung muss sichtbar werden statt still zu passieren – egal ob sie
 // vom Scheduler kommt oder von einer Änderung im Plan von Hand.
 //
-// J'ADEQA: offen 09:30–20:00, in der Hauptzeit 15:00–19:00 sollen mindestens
+// J'ADEQA: offen 09:00–19:00, in der Hauptzeit 15:00–19:00 sollen mindestens
 // 2 Leute da sein (samstags ab 11:00) – und zu jeder Öffnungsminute mindestens
 // eine Person.
 // ============================================================================
@@ -33,15 +33,15 @@ const peak = (id: string, date = "2026-09-01"): Shift => ({
   generated: true,
 });
 
-/** Ganzer Tag 09:30–20:00 ist mit einer 8-h-Schicht nicht zu schaffen … */
+/** Ganzer Tag 09:00–19:00 ist mit einer 8-h-Schicht nicht zu schaffen … */
 const frueh = (id: string, date = "2026-09-01"): Shift => ({
   id: `shift-frueh-${id}`,
   employeeId: id,
   date,
-  startMinutes: 9 * 60 + 30,
+  startMinutes: 9 * 60,
   endMinutes: 15 * 60,
   pauseMinutes: 0,
-  paidMinutes: 5 * 60 + 30,
+  paidMinutes: 6 * 60,
   shiftType: "EARLY",
   generated: true,
 });
@@ -51,9 +51,9 @@ const spaet = (id: string, date = "2026-09-01"): Shift => ({
   employeeId: id,
   date,
   startMinutes: 15 * 60,
-  endMinutes: 20 * 60,
+  endMinutes: 19 * 60,
   pauseMinutes: 0,
-  paidMinutes: 5 * 60,
+  paidMinutes: 4 * 60,
   shiftType: "LATE",
   generated: true,
 });
@@ -83,7 +83,7 @@ describe("Zu wenige Leute in der Hauptzeit", () => {
     expect(hauptzeit.required).toBe(2); // Vorgabe: zwei in der Hauptzeit
   });
 
-  it("meldet die Lücke am Vormittag – von 09:30 an ist niemand da", () => {
+  it("meldet die Lücke am Vormittag – von 09:00 an ist niemand da", () => {
     const day = analysis.days.find((d) => d.date === "2026-09-01")!;
     const offen = day.peaks.find((p) => p.label === "Trong giờ mở cửa")!;
     expect(offen.minStaff).toBe(0);

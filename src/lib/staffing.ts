@@ -53,7 +53,7 @@ const WERKTAGE: readonly WeekdayKey[] = ["monday", "tuesday", "wednesday", "thur
 
 /**
  * J'ADEQA Nagelstudio – ein Laden, kleines Team (Inhaberin plus drei bis vier
- * Angestellte, die häufig wechseln), offen Mo–Sa 09:30–20:00.
+ * Angestellte, die häufig wechseln), offen Mo–Sa 09:00–19:00.
  *
  *  - „Phủ kín giờ mở cửa" – harte Regel: nie null Personen im Studio.
  *  - Hauptzeit Mo–Fr 15:00–19:00 und Sa ab 11:00 – dort die zweite Person.
@@ -161,16 +161,14 @@ export const DEMAND_PROFILE: { normal: readonly DemandBand[]; saturday: readonly
     band("12:00", "14:00", 1.1, "Trưa"),
     band("14:00", "15:00", 1.2, "Vào cao điểm"),
     band("15:00", "17:00", 1.5, "Cao điểm chiều"),
-    band("17:00", "19:00", 1.5, "Cao điểm tối"),
-    band("19:00", "20:00", 0.9, "Vãn khách, đóng cửa"),
+    band("17:00", "19:00", 1.5, "Cao điểm tối, đóng cửa"),
   ],
   // Thứ Bảy: khách đi mua sắm từ trưa, cao điểm kéo dài 11:00–19:00.
   saturday: [
     band("09:00", "10:00", 0.9, "Mở cửa"),
     band("10:00", "11:00", 1.1, "Khách bắt đầu đông"),
     band("11:00", "15:00", 1.5, "Cao điểm trưa"),
-    band("15:00", "19:00", 1.5, "Cao điểm chiều"),
-    band("19:00", "20:00", 1.0, "Vãn khách, đóng cửa"),
+    band("15:00", "19:00", 1.5, "Cao điểm chiều, đóng cửa"),
   ],
 };
 
