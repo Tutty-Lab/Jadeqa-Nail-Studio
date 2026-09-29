@@ -23,8 +23,10 @@ Passwort, eine Zeile in Supabase (`store_id = "jadeqa"`).
 - **Höchstens 8 bezahlte Stunden am Tag**, höchstens 6 Tage am Stück, alle
   Zeiten auf dem 30-Minuten-Raster. Pause: über 6 h 30 Minuten, über 8 h 60
   Minuten – und nach § 4 ArbZG nie mehr als 6 Stunden am Stück ohne Pause.
-- **Höchstens 5 Arbeitstage je Woche** für die Angestellten. Die Inhaberin ist
-  ausgenommen: 169 h passen in einem kurzen Monat sonst nicht (20 Tage × 8 h).
+- **Höchstens 5 Arbeitstage je Woche** für alle.
+- **Die Inhaberin steht nicht im Plan.** Sie ist meist im Laden, aber die
+  Öffnungszeit muss von den Angestellten allein abgedeckt werden – sonst sieht
+  ein Tag besetzt aus, an dem nur die Chefin da ist.
 
 ## Eintritt und Austritt (neu gegenüber den anderen Studio-Apps)
 
@@ -48,7 +50,6 @@ Ohne „Wöch.Arb.Zt." auf der Abrechnung: **Brutto ÷ Mindestlohn**
 
 | Person | Eintritt | Austritt | Vertrag |
 |---|---|---|---|
-| Chu tiem (Inhaberin) | — | — | 169 h/Monat *(Annahme)* |
 | Thi Kim Oanh Pham | 01.11.2024 | — | 70,2 h/Monat (900 €) |
 | Tri Duc Nguyen | 01.05.2025 | — | 87,4 h/Monat (1.120 €) |
 | Dinh Hai Le | 15.05.2025 | **31.07.2025** | 93,6 h/Monat (1.200 €) |
@@ -56,34 +57,28 @@ Ohne „Wöch.Arb.Zt." auf der Abrechnung: **Brutto ÷ Mindestlohn**
 | Van Anh Nguyen | 01.11.2025 | — | 5 h/Woche (Minijob) |
 | Thuy Linh Tran | 15.01.2026 | — | 19,5 h/Woche |
 
-Zwei Dinge muss der Betrieb bestätigen:
+Eine Sache muss der Betrieb bestätigen:
 
-1. **Die Inhaberin** steht mit Namen „Chu tiem" und 169 h im Plan. Sie hat
-   keine Lohnabrechnung; ohne sie reichen die Verträge nicht, um 09:00–19:00 an
-   26 Tagen zu besetzen. Name und Stunden im Tab „Nhân viên" anpassen.
-2. **Geänderte Stunden:** Quynh Nhu Nguyen hatte 117 h (09/2025), dann
+- **Geänderte Stunden:** Quynh Nhu Nguyen hatte 117 h (09/2025), dann
    27 h/Woche, seit 02/2026 19,5 h/Woche. Hinterlegt ist der letzte Stand – für
    einen älteren Monat vor dem Erzeugen umstellen.
 
 ## Was der Plan leistet
 
-Gerechnet über alle 11 Monate mit Lohnabrechnung (05/2025–03/2026):
+Nur mit den Angestellten (ohne Inhaberin), 05/2025–01/2027, geprüft mit
+`npx vite-node scripts/audit-schedule.mts`:
 
 | | Ergebnis |
 |---|---|
 | Verträge | eingehalten, Abweichung höchstens eine halbe Stunde |
-| Arbeitsrecht (8 h, 6 Tage, Pausen, Raster) | keine Verstöße |
-| Laden unbesetzt | **keine einzige halbe Stunde** im ganzen Zeitraum |
-| Hauptzeit unterbesetzt | 210 halbe Stunden, davon 130 allein im August 2025 |
+| Arbeitsrecht (8 h, 5 Tage/Woche, 6 Tage am Stück, Pausen, Raster) | keine Verstöße |
+| Laden unbesetzt, wenn die Vertragsstunden reichen | 0 h – einzige Ausnahme 12/2025: 1 h (256 h Vertrag für 250 h Öffnung) |
+| Laden unbesetzt, wenn sie NICHT reichen | 05/2025 41 h · 07/2025 20 h · 08/2025 103 h · 09/2025 und 10/2025 je 20 h |
 
-Der August 2025 ist der Engpass: da hatte das Studio nur **drei Verträge**
-(Inhaberin, 70,2 h, 87,4 h). Die Stunden reichen für die volle Abdeckung der
-Öffnungszeit, aber nicht für zwei Personen in der Hauptzeit. Der Rest verteilt
-sich auf 05/2025 (43) und 07/2025 (24) – ebenfalls schwach besetzte Monate –
-sowie einzelne halbe Stunden in 09/2025 (5) und 10/2025 (8). Ab November 2025
-(fünf Verträge) ist der Plan sauber, 11/2025–03/2026 ohne jede Lücke.
-
-Nachgerechnet mit `npx vite-node scripts/coverage-check.mts`.
+Die Lücken 2025 sind echter Personalmangel: in diesen Monaten liegen die
+Verträge zusammen unter der Öffnungszeit (08/2025: 158 h für 260 h). Ab 11/2025
+ist der Laden immer besetzt. Die zweite Person in der Hauptzeit fehlt 2026 noch
+in rund 45–80 halben Stunden je Monat – dafür reichen die Stunden nicht.
 
 ## PDF
 

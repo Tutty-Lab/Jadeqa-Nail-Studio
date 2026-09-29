@@ -25,6 +25,8 @@ let peakShort = 0;
 let overMax = 0;
 let runs = 0;
 const peakByMonth: Record<string, number> = {};
+const emptyByMonth: Record<string, number> = {};
+const capByMonth: Record<string, string> = {};
 const hoursDev: string[] = [];
 
 const isoWeek = (d: Date) => {
@@ -40,6 +42,9 @@ for (const [year, month] of months) {
   const employees = store.sampleEmployees();
   const dates = datesOfMonth(year, month);
   const open = dates.filter((d) => !resolveDay(store.workHours, d, holidays, {}).closed);
+  const cap = employees.reduce((a, e) => a + monthlyTargetMinutesFor(e, open, store.workHours), 0) / 60;
+  const openH = open.reduce((a, d) => a + resolveDay(store.workHours, d, holidays, {}).blocks.reduce((b, x) => b + x.endMinutes - x.startMinutes, 0), 0) / 60;
+  capByMonth[`${year}-${String(month).padStart(2, "0")}`] = `HĐ ${cap.toFixed(0)}h / mở ${openH}h`;
   for (let seed = 0; seed < SEEDS; seed++) {
     runs++;
     const tag = `${year}-${String(month).padStart(2, "0")}#${seed}`;
@@ -109,7 +114,7 @@ for (const [year, month] of months) {
           const have = new Set(onDay.filter((s) => workingAt(s, m)).map((s) => s.employeeId)).size;
           let need = 0, max = Infinity;
           for (const w of windows) if (m >= w.startMinutes && m < w.endMinutes) { need = Math.max(need, w.minStaff); max = Math.min(max, w.maxStaff); }
-          if (have === 0) { empty++; add("Tiệm trống người", `${tag} ${d} ${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`); }
+          if (have === 0) { empty++; emptyByMonth[tag.slice(0, 7)] = (emptyByMonth[tag.slice(0, 7)] ?? 0) + 1; add("Tiệm trống người", `${tag} ${d} ${Math.floor(m / 60)}:${String(m % 60).padStart(2, "0")}`); }
           if (have < need) { peakShort++; const k = tag.slice(0, 7); peakByMonth[k] = (peakByMonth[k] ?? 0) + 1; }
           if (have > max) overMax++;
         }
@@ -123,6 +128,7 @@ for (const [year, month] of months) {
 console.log(`Đã chạy ${runs} lịch (${months.length} tháng × ${SEEDS} seed)`);
 console.log(`Ô 30' tiệm trống: ${empty} · thiếu người cao điểm: ${peakShort} (TB ${(peakShort / runs).toFixed(1)}/tháng) · vượt tối đa 4: ${overMax}`);
 console.log(`  theo tháng (TB mỗi lịch):`, Object.entries(peakByMonth).map(([k, n]) => `${k}: ${n / SEEDS}`).join(" · "));
+for (const k of Object.keys(capByMonth)) console.log(`  ${k}: ${capByMonth[k]} · trống ${(emptyByMonth[k] ?? 0) / SEEDS / 2}h · thiếu cao điểm ${(peakByMonth[k] ?? 0) / SEEDS}`);
 console.log(`Lệch giờ hợp đồng >30': ${hoursDev.length}`);
 for (const h of hoursDev.slice(0, 15)) console.log("  ", h);
 const keys = Object.keys(problems);
