@@ -11,11 +11,13 @@ export type StaffingWindow = {
 };
 
 /** Anfang der Hauptzeit an Werktagen (Mo–Fr): ab hier wird es voll. */
-export const PEAK_START = 15 * 60;
+export const PEAK_START = 16 * 60;
 /** Ende der Hauptzeit – danach läuft der Tag aus. */
 export const PEAK_END = 19 * 60;
 /** Samstags geht die Hauptzeit schon am späten Vormittag los. */
-export const SATURDAY_PEAK_START = 11 * 60;
+export const SATURDAY_PEAK_START = 13 * 60;
+/** Samstags ebbt der Andrang vor Ladenschluss ab. */
+export const SATURDAY_PEAK_END = 18 * 60;
 
 /**
  * Eine Besetzungsregel: WO (Zeitspanne je Öffnungsblock) und WIE VIELE.
@@ -49,7 +51,12 @@ export const clip = (from: number, to: number) => (blocks: DayBlocks): DayWindow
 export const wholeDay = (blocks: DayBlocks): DayWindow[] =>
   blocks.map((block) => ({ startMinutes: block.startMinutes, endMinutes: block.endMinutes }));
 
-const WERKTAGE: readonly WeekdayKey[] = ["monday", "tuesday", "wednesday", "thursday", "friday"];
+/**
+ * Tage mit Hauptzeit-Doppelbesetzung. Dienstag (Gewicht 1,0, der ruhigste Tag)
+ * fehlt bewusst: fünf Verträge tragen die zweite Person nur an vier Werktagen
+ * plus Samstag – mit Dienstag fehlten jeden Monat rund 12 h.
+ */
+const WERKTAGE: readonly WeekdayKey[] = ["monday", "wednesday", "thursday", "friday"];
 
 /**
  * J'ADEQA Nagelstudio – ein Laden, kleines Team (Inhaberin plus drei bis vier
@@ -70,12 +77,12 @@ export const JADEQA_STAFFING_RULES: readonly StaffingRule[] = [
     windows: wholeDay,
   },
   {
-    label: "Cao điểm T2–T6", when: "15:00–19:00", minStaff: 2, maxStaff: 4, scaled: false,
+    label: "Cao điểm T2, T4–T6", when: "16:00–19:00", minStaff: 2, maxStaff: 4, scaled: false,
     weekdays: WERKTAGE, windows: clip(PEAK_START, PEAK_END),
   },
   {
-    label: "Cao điểm T7", when: "11:00–19:00", minStaff: 2, maxStaff: 4, scaled: false,
-    weekdays: ["saturday"], windows: clip(SATURDAY_PEAK_START, PEAK_END),
+    label: "Cao điểm T7", when: "13:00–18:00", minStaff: 2, maxStaff: 4, scaled: false,
+    weekdays: ["saturday"], windows: clip(SATURDAY_PEAK_START, SATURDAY_PEAK_END),
   },
 ];
 

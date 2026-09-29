@@ -7,6 +7,7 @@ import {
   DEMAND_PROFILE,
   PEAK_END,
   PEAK_START,
+  SATURDAY_PEAK_END,
   SATURDAY_PEAK_START,
   type DemandBand,
 } from "../lib/staffing";
@@ -248,7 +249,7 @@ Hệ số ngày: <b>T2 1,2 · T3 1,0 · T4 1,2 · T5 1,2 · T6 2,0 · T7 2,0</b>
       <Section title="3. Khung giờ và mục tiêu nhân sự">
         <p>
 Mỗi khung có <b>số người tối thiểu và tối đa</b>. Yêu cầu của chủ tiệm: <b>phủ kín giờ mở cửa</b> và
-          <b>đông người vào cao điểm</b> ({minutesToTime(PEAK_START)}–{minutesToTime(PEAK_END)}, riêng T7 từ {minutesToTime(SATURDAY_PEAK_START)}).
+          <b>đông người vào cao điểm</b> (T2, T4–T6 {minutesToTime(PEAK_START)}–{minutesToTime(PEAK_END)}, T7 {minutesToTime(SATURDAY_PEAK_START)}–{minutesToTime(SATURDAY_PEAK_END)}; thứ Ba vắng nhất nên không đòi 2 người).
           Mốc 2 người là YÊU CẦU, không phải lúc nào cũng đủ giờ hợp đồng để trả: tháng nào tiệm chỉ còn ba
           hợp đồng thì tổng giờ vừa đủ để phủ cửa, không đủ cho người thứ hai suốt cao điểm. Những lúc ấy app
           để thiếu người ở cao điểm chứ <b>ưu tiên không để tiệm trống</b> (phạt gấp 10), và báo cáo Độ phủ

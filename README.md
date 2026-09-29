@@ -17,8 +17,9 @@ Passwort, eine Zeile in Supabase (`store_id = "jadeqa"`).
   Minute mindestens eine Person. Im Planer ist ein leerer Laden zehnmal so
   teuer wie eine fehlende zweite Person, und die Strafe zählt einmal je halbe
   Stunde (nicht je Regel, sonst schiebt der Planer das Loch an den Rand).
-- **Hauptzeit:** Mo–Fr 15:00–19:00, Sa ab 11:00 – dort sollen **2 Personen**
-  da sein, höchstens 4.
+- **Hauptzeit:** Mo, Mi–Fr 16:00–19:00, Sa 13:00–18:00 – dort sollen
+  **2 Personen** da sein, höchstens 4. Dienstag (ruhigster Tag) ohne
+  Doppelbesetzung: mehr tragen die fünf Verträge nicht.
 - **Tagesgewichte:** Mo 1,2 · Di 1,0 · Mi 1,2 · Do 1,2 · **Fr 2,0 · Sa 2,0**.
 - **Höchstens 8 bezahlte Stunden am Tag**, höchstens 6 Tage am Stück, alle
   Zeiten auf dem 30-Minuten-Raster. Pause: über 6 h 30 Minuten, über 8 h 60
@@ -77,8 +78,9 @@ Nur mit den Angestellten (ohne Inhaberin), 05/2025–01/2027, geprüft mit
 
 Die Lücken 2025 sind echter Personalmangel: in diesen Monaten liegen die
 Verträge zusammen unter der Öffnungszeit (08/2025: 158 h für 260 h). Ab 11/2025
-ist der Laden immer besetzt. Die zweite Person in der Hauptzeit fehlt 2026 noch
-in rund 45–80 halben Stunden je Monat – dafür reichen die Stunden nicht.
+ist der Laden (bis auf einzelne halbe Stunden) immer besetzt. Die zweite Person
+in der Hauptzeit fehlt ab 02/2026 nur noch in 0–16 halben Stunden je Monat,
+fast nur in der Woche am Monatswechsel.
 
 ## PDF
 

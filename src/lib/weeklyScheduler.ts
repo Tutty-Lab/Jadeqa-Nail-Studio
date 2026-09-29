@@ -63,9 +63,10 @@ const MIN_SHIFT = 180;
  * Angestrebte Dienstlänge. Früher wurde die Woche auf möglichst VIELE Tage
  * verteilt (Stunden ÷ 3 h) – heraus kamen 3-Stunden-Stafetten 9–12, 12–15,
  * 15–18 an fünf Tagen. Lieber weniger Tage mit ~5–6 h: weniger Anfahrten,
- * und eine Person trägt die Hauptzeit von Anfang bis Ende.
+ * und eine Person trägt die Hauptzeit von Anfang bis Ende. 5 h statt 6 h: sonst
+ * reichen die Personentage nicht für drei Leute an jedem Hauptzeit-Tag.
  */
-const PREFERRED_SHIFT = 360;
+const PREFERRED_SHIFT = 300;
 /** Höchste bezahlte Zeit je Tag: 8 h (Vorgabe des Betriebs, siehe validation.ts). */
 const MAX_PAID = 480;
 /** Cost per (person deviation)² per 30-minute slot against the demand curve. */
