@@ -1,11 +1,11 @@
 // ============================================================================
 // Năm được phép xếp và in lịch – checklist nghiệm thu mục G:
-// "CHỈ ĐƯỢC IN LỊCH cho các năm 2026–2030 (ngoài khoảng này phải chặn)".
+// "CHỈ ĐƯỢC IN LỊCH cho các năm 2024–2028 (ngoài khoảng này phải chặn)".
 // Dùng chung cho popup Tạo lịch, ô Năm trong Cài đặt, hàm generate và nút Xuất PDF.
 // ============================================================================
 
-export const FIRST_SCHEDULE_YEAR = 2026;
-export const LAST_SCHEDULE_YEAR = 2030;
+export const FIRST_SCHEDULE_YEAR = 2024;
+export const LAST_SCHEDULE_YEAR = 2028;
 
 export const SCHEDULE_YEARS: readonly number[] = Array.from(
   { length: LAST_SCHEDULE_YEAR - FIRST_SCHEDULE_YEAR + 1 },

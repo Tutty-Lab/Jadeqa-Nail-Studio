@@ -101,7 +101,7 @@
 - [ ] Trên **điện thoại không vỡ layout**; bảng rộng **cuộn ngang** được.
 - [ ] **Sửa tay 1 ca** lưu đúng + đánh dấu **"đã sửa tay"**.
 - [ ] **Sáng/tối (light/dark)** không lỗi màu.
-- [ ] ⚠️ **CHỈ ĐƯỢC IN LỊCH cho các năm 2026–2030** (ngoài khoảng này phải chặn).
+- [ ] ⚠️ **CHỈ ĐƯỢC IN LỊCH cho các năm 2024–2028** (ngoài khoảng này phải chặn).
 
 ---
 
