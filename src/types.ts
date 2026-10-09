@@ -15,7 +15,18 @@ export type EmploymentType = "VOLLZEIT" | "TEILZEIT" | "MINIJOB";
 
 export type ShiftType = "EARLY" | "LATE" | "CUSTOM";
 
+export type PayrollRecord = {
+  month: string; // yyyy-MM; only explicitly supplied months
+  grossEuro: number;
+  convertedHours: number; // supplied monthly scheduling target, not actual attendance
+};
+
+export type Vacation = { start: string; end: string };
+
 export type Employee = {
+  isOwner?: boolean;
+  vacations?: Vacation[];
+  payrollRecords?: PayrollRecord[];
   id: string;
   name: string;
   employmentType: EmploymentType;
@@ -102,6 +113,7 @@ export type Shift = {
 };
 
 export type Schedule = {
+  historyVersion?: number;
   companyName: string;
   /** Anschrift des Betriebs (erscheint auf dem Stundenzettel). */
   address: string;

@@ -1,3 +1,4 @@
+import { isOnVacation } from "../lib/availability";
 import type { Schedule, Shift } from "../types";
 import {
   parseIsoDate,
@@ -24,9 +25,9 @@ export type SchedulePrintLayout = "byEmployee" | "byDate";
  * Eine Zelle kann MEHRERE Dienste enthalten – mittags und abends. Steht dort
  * nur einer, fehlt auf dem ausgehängten Plan die halbe Wahrheit.
  */
-function ShiftCell({ shifts, closed }: { shifts: Shift[]; closed: boolean }) {
+function ShiftCell({ shifts, closed, vacation }: { shifts: Shift[]; closed: boolean; vacation: boolean }) {
   if (shifts.length === 0) {
-    return <span className="text-slate-400">{closed ? "—" : "frei"}</span>;
+    return <span className="text-slate-400">{closed ? "—" : vacation ? "Urlaub" : "frei"}</span>;
   }
   const isMulti = shifts.length > 1;
   return (
@@ -148,7 +149,7 @@ export function SchedulePrintPage({
                   <td className={`${td} whitespace-nowrap`}>{e.name}</td>
                   {dates.map((d) => (
                     <td key={d} className={`${td} text-center ${closedOn(d) ? "bg-slate-50" : ""}`}>
-                      <ShiftCell shifts={byKey.get(`${e.id}#${d}`) ?? []} closed={closedOn(d)} />
+                      <ShiftCell shifts={byKey.get(`${e.id}#${d}`) ?? []} closed={closedOn(d)} vacation={isOnVacation(e, d)} />
                     </td>
                   ))}
                   <td className={`${td} text-right font-medium`}>{minutesToShortHours(total)}</td>
@@ -198,7 +199,7 @@ export function SchedulePrintPage({
                   </td>
                   {emps.map((e) => (
                     <td key={e.id} className={`${td} text-center`}>
-                      <ShiftCell shifts={byKey.get(`${e.id}#${d}`) ?? []} closed={closed} />
+                      <ShiftCell shifts={byKey.get(`${e.id}#${d}`) ?? []} closed={closed} vacation={isOnVacation(e, d)} />
                     </td>
                   ))}
                 </tr>

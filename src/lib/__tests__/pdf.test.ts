@@ -121,3 +121,46 @@ describe("sharePdf (trình duyệt nhúng Zalo/Messenger)", () => {
     await expect(sharePdf(blob, "a.pdf")).resolves.toBe("failed");
   });
 });
+
+describe("Urlaub in PDF exports", () => {
+  it("marks vacation separately from attendance and public holidays", async () => {
+    const { buildStundenzettelPdf, buildDienstplanPdf } = await import("../pdf");
+    const { initialScheduleFor, storeById } = await import("../stores");
+    const schedule = { ...initialScheduleFor(storeById("jadeqa")), year: 2025, month: 1 };
+    const employee = schedule.employees.find((e) => e.id === "jadeqa-1")!;
+    const dates = ["2025-01-01", "2025-01-02", "2025-01-24", "2025-01-25"];
+    const timesheet = await buildStundenzettelPdf(schedule, [employee], { dates });
+    const contents = (pdf: typeof timesheet) => (pdf.internal as unknown as { pages: string[][] }).pages.flat().join("\n");
+    const text = contents(timesheet);
+    expect(text).toContain("Urlaub");
+    expect(text).toContain("Stunden offen");
+    expect(text).toContain("Feiertag");
+    expect(text).not.toContain("08:00");
+    expect(timesheet.getNumberOfPages()).toBe(1);
+    for (const layout of ["byEmployee", "byDate"] as const) {
+      const plan = buildDienstplanPdf(schedule, { dates, title: "Januar 2025", layout, employeeIds: [employee.id] });
+      expect(contents(plan)).toContain("Urlaub");
+      expect(plan.getNumberOfPages()).toBe(1);
+    }
+  });
+});
+
+describe("choose PDF save location", () => {
+  it("writes the PDF to the selected file and closes it", async () => {
+    const write = vi.fn(async () => {});
+    const close = vi.fn(async () => {});
+    const picker = vi.fn(async () => ({ createWritable: async () => ({ write, close }) }));
+    vi.stubGlobal("window", { showSaveFilePicker: picker });
+    const { savePdfAtLocation } = await import("../pdf");
+    const blob = new Blob(["%PDF"]);
+    expect(await savePdfAtLocation(blob, "Jadeqa_05_2025.pdf")).toBe("saved");
+    expect(picker).toHaveBeenCalledWith(expect.objectContaining({ suggestedName: "Jadeqa_05_2025.pdf" }));
+    expect(write).toHaveBeenCalledWith(blob);
+    expect(close).toHaveBeenCalledOnce();
+  });
+  it("cancelling the chooser does not trigger a download", async () => {
+    vi.stubGlobal("window", { showSaveFilePicker: async () => { throw Object.assign(new Error("cancelled"), { name: "AbortError" }); } });
+    const { savePdfAtLocation } = await import("../pdf");
+    expect(await savePdfAtLocation(new Blob(), "a.pdf")).toBe("cancelled");
+  });
+});

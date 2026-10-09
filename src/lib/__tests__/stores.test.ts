@@ -253,7 +253,7 @@ describe("Ein Studio, Belegschaft aus den Lohnabrechnungen", () => {
     // Eintritt und Austritt, wie auf den Abrechnungen ausgewiesen.
     expect(byName.get("Thi Kim Oanh Pham")!.startDate).toBe("2024-11-01");
     expect(byName.get("Dinh Hai Le")!.startDate).toBe("2025-05-15");
-    expect(byName.get("Dinh Hai Le")!.endDate).toBe("2025-07-31");
+    expect(byName.get("Dinh Hai Le")!.endDate).toBeUndefined();
     expect(byName.get("Thuy Linh Tran")!.startDate).toBe("2026-01-15");
     // Wer keinen Austritt hat, arbeitet weiter.
     for (const name of ["Thi Kim Oanh Pham", "Tri Duc Nguyen", "Quynh Nhu Nguyen", "Van Anh Nguyen", "Thuy Linh Tran"]) {
@@ -277,9 +277,9 @@ describe("Eintritt und Austritt", () => {
     }
   });
 
-  it("wer im August 2025 schon weg ist, taucht gar nicht mehr auf", () => {
+  it("ohne bestätigten Austritt bleibt Hai auch im August eingeplant", () => {
     const shifts = planOf(2025, 8, store);
-    expect(shifts.filter((s) => s.employeeId === "jadeqa-3")).toEqual([]);
+    expect(shifts.some((s) => s.employeeId === "jadeqa-3")).toBe(true);
     // Im Juli war er noch da.
     expect(planOf(2025, 7, store).some((s) => s.employeeId === "jadeqa-3")).toBe(true);
   });

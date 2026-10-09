@@ -44,8 +44,9 @@ describe("Eintritt mitten im Monat (startDate)", () => {
   });
 
   it("verplant keine Tage vor dem Startdatum und meldet keine Fehlstunden-Warnung", () => {
-    // Arkaden rechnet in Monatsstunden; zwei Personen treten mitten im Monat ein.
-    const base = initialScheduleFor(storeById("arkaden"));
+    // Isolate entry-date proration from reported vacation and payroll overrides.
+    const base = initialScheduleFor(storeById("jadeqa"));
+    base.employees = base.employees.map((employee) => ({ ...employee, vacations: [], payrollRecords: [] }));
     const seed = {
       ...base,
       employees: base.employees.map((employee: Employee, index: number) =>

@@ -25,7 +25,9 @@ import { publicHolidays } from "../lib/holidays";
 import { initialScheduleFor, storeById, type StoreConfig } from "../lib/stores";
 import { contractOpenDays } from "../lib/contract";
 import { weekStartOf } from "../lib/weeks";
-import { isEmployedOn } from "../lib/availability";
+import { withOwner } from "../lib/owner";
+import { applyReportedHistory, hasMonthData } from "../lib/history";
+import { isEmployedOn, mayWorkOn } from "../lib/availability";
 
 /**
  * Steht in diesem Stand überhaupt etwas? Maßstab sind Mitarbeiter und
@@ -68,7 +70,8 @@ const withoutRemoved = (shifts: Shift[]): Shift[] => shifts.filter((s) => !REMOV
 function normalizeSchedule(raw: Schedule | undefined, store: StoreConfig): Schedule {
   const base = emptySchedule(store);
   if (!raw) return base;
-  return {
+  return withOwner(applyReportedHistory({
+    historyVersion: raw.historyVersion,
     // Firmenname & Adresse kommen aus der Filiale (không cho sửa).
     companyName: store.name,
     address: store.address,
@@ -80,7 +83,7 @@ function normalizeSchedule(raw: Schedule | undefined, store: StoreConfig): Sched
     shifts: withoutRemoved(raw.shifts ?? []),
     lockedAt: raw.lockedAt,
     printedWeeks: Array.isArray(raw.printedWeeks) ? raw.printedWeeks : [],
-  };
+  }));
 }
 
 /** Lokaler Stand einer Filiale; beim allerersten Öffnen die Startbelegschaft. */
@@ -201,13 +204,13 @@ export function useSchedule(storeId: string) {
    * Stundenzettel. Im Tab „Nhân viên" bleiben trotzdem alle sichtbar.
    */
   const activeEmployees = useMemo(
-    () => schedule.employees.filter((employee) => openDates.some((date) => isEmployedOn(employee, date))),
-    [schedule.employees, openDates],
+    () => schedule.employees.filter((employee) => hasMonthData(employee, `${schedule.year}-${String(schedule.month).padStart(2, "0")}`) && openDates.some((date) => isEmployedOn(employee, date))),
+    [schedule.employees, schedule.year, schedule.month, openDates],
   );
 
   const validation: ValidationResult = useMemo(
-    () => validateSchedule(schedule.employees, schedule.shifts, schedule.year, openDates, schedule.workHours),
-    [schedule.employees, schedule.shifts, schedule.year, openDates, schedule.workHours],
+    () => validateSchedule(activeEmployees, schedule.shifts, schedule.year, openDates, schedule.workHours),
+    [activeEmployees, schedule.shifts, schedule.year, openDates, schedule.workHours],
   );
 
   /**
@@ -254,9 +257,9 @@ export function useSchedule(storeId: string) {
         (patch.year !== undefined && patch.year !== s.year) ||
         (patch.month !== undefined && patch.month !== s.month);
       if (monthChanged) {
-        return { ...s, ...patch, lockedAt: undefined, printedWeeks: [] };
+        return withOwner({ ...s, ...patch, lockedAt: undefined, printedWeeks: [] });
       }
-      return { ...s, ...patch };
+      return withOwner({ ...s, ...patch });
     });
   }, []);
 
@@ -379,7 +382,7 @@ export function useSchedule(storeId: string) {
         month,
         workHours: schedule.workHours,
         overrides: overridesToMap(schedule.dateOverrides),
-        employees: schedule.employees,
+        employees: schedule.employees.filter((e) => hasMonthData(e, `${year}-${String(month).padStart(2, "0")}`)),
         rules: storeConfig.staffingRules,
         weights: storeConfig.dayWeights,
         blockedDays,
@@ -426,12 +429,12 @@ export function useSchedule(storeId: string) {
     setSchedule((s) => {
       const rest = s.dateOverrides.filter((o) => o.date !== override.date);
       const next = [...rest, override].sort((a, b) => a.date.localeCompare(b.date));
-      return { ...s, dateOverrides: next };
+      return withOwner({ ...s, dateOverrides: next });
     });
   }, []);
 
   const removeOverride = useCallback((date: string) => {
-    setSchedule((s) => ({
+    setSchedule((s) => withOwner({
       ...s,
       dateOverrides: s.dateOverrides.filter((o) => o.date !== date),
     }));
@@ -464,6 +467,8 @@ export function useSchedule(storeId: string) {
     (employeeId: string, date: string, start: number, end: number, pause: number, pauseStart?: number) => {
       setSchedule((s) => {
         if (s.lockedAt) return s; // Monat ausgegeben und gesperrt
+        const employee = s.employees.find((e) => e.id === employeeId);
+        if (!employee || !mayWorkOn(employee, date) || resolveDay(s.workHours, date, publicHolidays(s.year), overridesToMap(s.dateOverrides)).closed) return s;
         const exists = s.shifts.some((sh) => sh.employeeId === employeeId && sh.date === date);
         if (exists) return s;
         return { ...s, shifts: [...s.shifts, createManualShift(employeeId, date, start, end, pause, pauseStart)] };
@@ -496,6 +501,8 @@ export function useSchedule(storeId: string) {
       if (s.lockedAt) return s; // Monat ausgegeben und gesperrt
       const shift = s.shifts.find((sh) => sh.id === shiftId);
       if (!shift) return s;
+      const employee = s.employees.find((e) => e.id === targetEmployeeId);
+      if (!employee || !mayWorkOn(employee, shift.date)) return s;
       const conflict = s.shifts.some(
         (sh) => sh.employeeId === targetEmployeeId && sh.date === shift.date,
       );

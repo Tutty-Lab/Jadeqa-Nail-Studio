@@ -1,13 +1,16 @@
+import { employeeForMonth } from "./history";
+import { ownerPresence } from "./owner";
 import type { Employee, Shift } from "../types";
 import { DAY_WEIGHTS, datesOfMonth, parseIsoDate, weekdayKeyOf, type WeekdayKey } from "./demand";
 import { monthlyTargetMinutesFor, weeklyBudgetMinutes, weeklyTargetMinutes } from "./contract";
 import { calculatePause } from "./time";
-import { isEmployedOn, mayWorkOn } from "./availability";
+import { mayWorkOn } from "./availability";
 import { consecutiveRunLengthWith } from "./consecutive";
 import { effectiveWeekdayKey, resolveDay, type DayBlocks, type DayWindow, type OverrideMap, type WorkHoursConfig } from "./workHours";
 import { publicHolidays } from "./holidays";
 import { weekStartOf } from "./weeks";
 import {
+  preferredStaff,
   PEAK_END,
   PEAK_START,
   STAFFING_RULES,
@@ -254,7 +257,9 @@ function dayCost(shifts: Shift[], blocks: DayBlocks, weekday: WeekdayKey, target
     for (const shift of shifts) if (workingAt(shift, minute)) staff++;
     return staff;
   });
-  let cost = 0;
+  // Prefer three people on Friday/Saturday without changing contract budgets
+  // or treating the preference as a staffing validation failure.
+  let cost = counts.reduce((sum, count) => sum + Math.max(0, preferredStaff(weekday) - count) * SLOT * 300, 0);
   const mussBesetzt = new Set<number>();
   for (const window of model.windows) {
     for (let k = 0; k < window.slots.length; k++) {
@@ -427,6 +432,7 @@ function topUpShortfalls(
   dailyTargets: Map<string, number>,
   targets: Map<string, number>,
   weeklyCaps: Map<string, Map<string, number>>,
+  weeklyTargets: Map<string, Map<string, number>>,
   ctx: Ctx,
 ): Shift[] {
   let shifts = [...result];
@@ -468,7 +474,12 @@ function topUpShortfalls(
             (other) => other !== shift && other.startMinutes < grown.endMinutes && grown.startMinutes < other.endMinutes,
           );
           if (clash) continue;
-          const cost = dayCost([...others, grown], day.blocks, weekday, dailyTargets.get(shift.date), ctx) - before;
+          // Keep rounding leftovers near the employee's apportioned weekly target.
+          // A full week receives comparable hours; partial/vacation weeks receive less.
+          const weekPaid = paidOf(own.filter((other) => weekStartOf(other.date) === week));
+          const weekTarget = weeklyTargets.get(employee.id)?.get(week) ?? weekPaid;
+          const balanceCost = (((weekPaid + SLOT - weekTarget) / 60) ** 2 - ((weekPaid - weekTarget) / 60) ** 2) * 30000;
+          const cost = dayCost([...others, grown], day.blocks, weekday, dailyTargets.get(shift.date), ctx) - before + balanceCost;
           if (!best || cost < best.cost) best = { old: shift, next: grown, cost };
         }
       }
@@ -818,6 +829,10 @@ function improveCoverage(result: Shift[], employees: Employee[], days: Map<strin
 }
 
 export function generateWeeklySchedule(input: WeeklyInput, existing: Shift[] = []): Shift[] {
+  input = { ...input, employees: input.employees.map((e) => employeeForMonth(e, `${input.year}-${String(input.month).padStart(2, "0")}`)) };
+  const owners = input.employees.filter((e) => e.isOwner);
+  existing = [...existing.filter((s) => !owners.some((e) => e.id === s.employeeId)), ...ownerPresence(input.year, input.month, input.workHours, input.overrides, owners, input.holidays)];
+  input = { ...input, employees: input.employees.filter((e) => !e.isOwner) };
   const ctx: Ctx = {
     rules: input.rules ?? STAFFING_RULES,
     weights: input.weights ?? DAY_WEIGHTS,
@@ -850,7 +865,7 @@ export function generateWeeklySchedule(input: WeeklyInput, existing: Shift[] = [
     if (employee.weeklyHours != null) return [employee.id, weeklyBudgetMinutes(employee, openDates, monthBounds, input.workHours)] as const;
     const empWeekInfo = weekInfo.map((week) => ({
       weekStart: week.weekStart,
-      openDays: (byWeek.get(week.weekStart) ?? []).filter((date) => isEmployedOn(employee, date)).length,
+      openDays: (byWeek.get(week.weekStart) ?? []).filter((date) => mayWorkOn(employee, date)).length,
     }));
     // Anteiliges Monats-Soll, wenn Eintritt oder Austritt in den Monat fallen.
     return [employee.id, weeklyTargetMinutes(monthlyTargetMinutesFor(employee, openDates, input.workHours), empWeekInfo)] as const;
@@ -948,7 +963,7 @@ export function generateWeeklySchedule(input: WeeklyInput, existing: Shift[] = [
       .filter((employee) => employee.weeklyHours != null)
       .map((employee) => [employee.id, budgets.get(employee.id)!] as const),
   );
-  result = topUpShortfalls(result, employees, days, holidays, dailyTargets, monthlyTargets, weeklyCaps, ctx);
+  result = topUpShortfalls(result, employees, days, holidays, dailyTargets, monthlyTargets, weeklyCaps, budgets, ctx);
 
   // Feinschliff und Tausch wechseln sich ab: der Tausch verschiebt Stunden
   // zwischen zwei Personen, der Feinschliff legt danach alles neu zurecht – und

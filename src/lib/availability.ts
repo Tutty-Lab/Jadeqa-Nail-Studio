@@ -46,6 +46,10 @@ export function isEmployedOn(employee: Employee, isoDate: string): boolean {
  * diesem Datum arbeiten? (fester freier Wochentag, ein Eintritt nach diesem Tag
  * oder ein Austritt davor sprechen dagegen)
  */
+export function isOnVacation(employee: Employee, isoDate: string): boolean {
+  return (employee.vacations ?? []).some((leave) => leave.start <= isoDate && isoDate <= leave.end);
+}
+
 export function mayWorkOn(employee: Employee, isoDate: string): boolean {
-  return worksOnWeekday(employee, isoDate) && isEmployedOn(employee, isoDate);
+  return worksOnWeekday(employee, isoDate) && isEmployedOn(employee, isoDate) && !isOnVacation(employee, isoDate);
 }

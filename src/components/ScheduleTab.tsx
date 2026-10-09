@@ -1,3 +1,4 @@
+import { isOnVacation } from "../lib/availability";
 import { useMemo, useState } from "react";
 import type { UseScheduleReturn } from "../hooks/useSchedule";
 import type { Shift } from "../types";
@@ -313,10 +314,10 @@ export function ScheduleTab({ store }: { store: UseScheduleReturn }) {
                       {emp.name}
                     </td>
                     <td className="border-b border-slate-100 px-2 py-1 text-slate-500">
-                      {employmentShortVi(emp.employmentType)}
+                      {emp.isOwner ? "Chủ" : employmentShortVi(emp.employmentType)}
                     </td>
                     <td className="border-b border-slate-100 px-2 py-1 text-right text-slate-500">
-                      {minutesToShortHours(sollMin)}
+                      {emp.isOwner ? "—" : minutesToShortHours(sollMin)}
                     </td>
                     {gridDates.map((d) => {
                       const dienste = shiftMap.get(`${emp.id}#${d}`) ?? [];
@@ -357,14 +358,14 @@ export function ScheduleTab({ store }: { store: UseScheduleReturn }) {
                                       </span>
                                     </div>
                                     <div className="text-[10px] opacity-80">
-                                      {minutesToShortHours(x.paidMinutes)} · <PauseLabel shift={x} />
+                                      {emp.isOwner ? "Có mặt tại tiệm" : <>{minutesToShortHours(x.paidMinutes)} · <PauseLabel shift={x} /></>}
                                     </div>
                                   </div>
                                 );
                               })}
                             </div>
                           ) : (
-                            <span className="text-[11px]">Nghỉ</span>
+                            <span className="text-[11px]">{isOnVacation(emp, d) ? "Urlaub" : "Nghỉ"}</span>
                           )}
                         </td>
                       );

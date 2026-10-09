@@ -23,8 +23,9 @@ export function StaffingReport({ analysis }: { analysis: ScheduleAnalysis }) {
       ? "border-rose-200 bg-rose-50 text-rose-900" : "border-emerald-200 bg-emerald-50 text-emerald-900"}`}>
       <summary className="cursor-pointer font-medium">
         {gaps.length ? `${gaps.length} khung thiếu/thừa nhân sự` : "Nhân sự đúng các khung vận hành"}
-        <span className="ml-2 text-xs font-normal">Xem hệ số 1,5 và nhân sự theo giờ</span>
+        <span className="ml-2 text-xs font-normal">Xem nhân sự theo giờ</span>
       </summary>
+      <p className="mt-2 text-xs">Ưu tiên thứ Sáu và thứ Bảy có 3 người, tính cả chủ tiệm. Đây là mục tiêu mềm: không tăng giờ hợp đồng và không báo lỗi chỉ vì chưa đạt 3 người.</p>
       <div className="mt-3 overflow-x-auto">
         <table className="min-w-[650px] border-collapse text-xs">
           <thead><tr><th className="border px-2 py-1 text-left">Ngày</th><th className="border px-2 py-1">Giờ mục tiêu</th><th className="border px-2 py-1">Giờ đã xếp</th><th className="border px-2 py-1 text-left">Kiểm tra nhân sự</th></tr></thead>

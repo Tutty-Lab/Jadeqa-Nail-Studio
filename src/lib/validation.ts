@@ -2,6 +2,7 @@
 // Validierung des Dienstplans gegen alle geforderten Regeln.
 // ============================================================================
 
+import { employeeForMonth } from "./history";
 import type { Employee, Shift } from "../types";
 import { monthlyTargetMinutes, monthlyTargetMinutesFor, SCHEDULE_SLOT_MINUTES } from "./contract";
 import { calculatePause, minutesToShortHours } from "./time";
@@ -69,6 +70,11 @@ export function validateSchedule(
   /** Wochenplan des Ladens – gleicher Faktor für das Monats-Soll wie im Scheduler. */
   workHours?: WorkHoursConfig,
 ): ValidationResult {
+  const month = typeof openDays !== "number" ? openDays?.[0]?.slice(0, 7) : undefined;
+  if (month) employees = employees.map((e) => employeeForMonth(e, month));
+  const ownerIds = new Set(employees.filter((e) => e.isOwner).map((e) => e.id));
+  employees = employees.filter((e) => !e.isOwner);
+  shifts = shifts.filter((s) => !ownerIds.has(s.employeeId));
   const errors: ValidationError[] = [];
   const sollOf = (e: Employee): number => {
     if (openDays == null) return e.targetMinutes;
@@ -89,6 +95,9 @@ export function validateSchedule(
 
   // Regeln je einzelner Schicht.
   for (const shift of shifts) {
+    if (Array.isArray(openDays) && !openDays.includes(shift.date)) errors.push({
+      employeeId: shift.employeeId, date: shift.date, message: `Đã xếp ca vào ngày tiệm đóng cửa ${shift.date}.`,
+    });
     const presence = shift.endMinutes - shift.startMinutes;
     const expectedPaid = presence - shift.pauseMinutes;
     const expectedPause = calculatePause(shift.paidMinutes);
@@ -170,7 +179,7 @@ export function validateSchedule(
     const maxRun = maxConsecutiveRun(new Set(empShifts.map((s) => s.date)));
     const soll = sollOf(emp);
 
-    if (emp.weeklyHours != null) {
+    {
       const weeks = new Map<string, { paid: number; dates: Set<string> }>();
       for (const shift of empShifts) {
         const week = weekStartOf(shift.date);
@@ -180,7 +189,7 @@ export function validateSchedule(
         weeks.set(week, total);
       }
       for (const [week, total] of weeks) {
-        if (total.paid > Math.round(emp.weeklyHours * 60)) {
+        if (emp.weeklyHours != null && total.paid > Math.round(emp.weeklyHours * 60)) {
           errors.push({
             employeeId: emp.id,
             date: week,

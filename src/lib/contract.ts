@@ -149,6 +149,9 @@ export function monthlyTargetMinutesFor(
   openDates: readonly string[],
   workHours: WorkHoursConfig = DEFAULT_WORK_HOURS,
 ): number {
+  if (emp.isOwner) return 0;
+  const record = emp.payrollRecords?.find((r) => r.month === openDates[0]?.slice(0, 7));
+  if (record) return Math.round(record.convertedHours * 60);
   if (emp.weeklyHours == null) return proratedMonthly(emp, openDates);
   const weekly = emp.weeklyHours * 60;
   return Math.max(0, Math.round(weekSharesFor(emp, openDates, workHours).reduce((sum, week) => sum + weekPartMinutes(weekly, week), 0)));

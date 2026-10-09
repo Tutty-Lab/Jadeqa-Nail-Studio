@@ -8,9 +8,8 @@
 //
 //   Thi Kim Oanh Pham   Eintritt 01.11.2024              900 EUR  -> 70,2 h/Monat
 //   Tri Duc Nguyen      Eintritt 01.05.2025            1.120 EUR  -> 87,4 h/Monat
-//   Dinh Hai Le         15.05.2025 bis 31.07.2025      1.200 EUR  -> 93,6 h/Monat
-//                       (Mai nur 680 EUR = halber Monat -> das rechnet die App
-//                        aus dem Eintrittsdatum selbst aus)
+//   Dinh Hai Le         Eintritt 15.05.2025; Austritt unbekannt.
+//                       Monatswerte aus der Nachmeldung stehen in history.ts.
 //   Quynh Nhu Nguyen    Eintritt 01.09.2025            Wöch.Arb.Zt. 19,50 h
 //   Van Anh Nguyen      Eintritt 01.11.2025            Wöch.Arb.Zt. 5,00 h
 //   Thuy Linh Tran      Eintritt 15.01.2026            Wöch.Arb.Zt. 19,50 h
@@ -19,11 +18,8 @@
 // aber der Plan muss die Öffnungszeit mit den Angestellten allein abdecken –
 // sonst sieht ein Tag "besetzt" aus, an dem nur die Chefin da ist.
 //
-// ACHTUNG, eine Annahme, die der Betrieb bestätigen muss:
-//  Wer seine Stunden im Lauf der Zeit geändert hat, steht mit dem ZULETZT
-//     belegten Wert hier (Quynh Nhu Nguyen: 117 h im September 2025, dann
-//     27 h/Woche, seit Februar 2026 19,5 h/Woche). Für einen älteren Monat die
-//     Stundenzahl vor dem Erzeugen des Plans umstellen.
+// Monatswerte und Urlaub aus der Nachmeldung: history.ts.
+// Nicht genannte Monate behalten den allgemeinen Vertrag.
 // ============================================================================
 
 import type { Employee, Schedule } from "../types";
@@ -75,7 +71,6 @@ export function jadeqaEmployees(): Employee[] {
     {
       ...makeEmployee("jadeqa-3", "Dinh Hai Le", "TEILZEIT", 93.6),
       startDate: "2025-05-15",
-      endDate: "2025-07-31",
       maxDaysPerWeek: 5,
     },
     {

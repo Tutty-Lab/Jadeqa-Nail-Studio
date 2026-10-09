@@ -5,6 +5,7 @@
 // LocalStorage-Schlüssel, eigene Belegschaft).
 // ============================================================================
 
+import { applyReportedHistory } from "./history";
 import type { Employee, Schedule } from "../types";
 import { jadeqaEmployees } from "./sampleData";
 import { DAY_WEIGHTS, type WeekdayKey } from "./demand";
@@ -77,7 +78,7 @@ export function storeById(id: string): StoreConfig {
  * rechnet sie über Eintritt/Austritt richtig.
  */
 export function initialScheduleFor(store: StoreConfig): Schedule {
-  return {
+  return applyReportedHistory({
     companyName: store.name,
     address: store.address,
     year: 2026,
@@ -86,5 +87,5 @@ export function initialScheduleFor(store: StoreConfig): Schedule {
     dateOverrides: [],
     employees: store.sampleEmployees(),
     shifts: [],
-  };
+  });
 }

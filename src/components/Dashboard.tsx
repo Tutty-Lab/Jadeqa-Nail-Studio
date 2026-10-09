@@ -90,17 +90,17 @@ function underQuotaReason(emp: Employee | undefined, schedule: Schedule): string
 }
 
 export function Dashboard({ store }: { store: UseScheduleReturn }) {
-  const { schedule, validation, peakGaps, openDates } = store;
-  const vz = schedule.employees.filter((e) => e.employmentType === "VOLLZEIT").length;
-  const tz = schedule.employees.filter((e) => e.employmentType === "TEILZEIT").length;
-  const mj = schedule.employees.filter((e) => e.employmentType === "MINIJOB").length;
+  const { schedule, validation, peakGaps, openDates, activeEmployees } = store;
+  const vz = schedule.employees.filter((e) => !e.isOwner && e.employmentType === "VOLLZEIT").length;
+  const tz = schedule.employees.filter((e) => !e.isOwner && e.employmentType === "TEILZEIT").length;
+  const mj = schedule.employees.filter((e) => !e.isOwner && e.employmentType === "MINIJOB").length;
   const byId = new Map(schedule.employees.map((e) => [e.id, e] as const));
   // Wochenverträge (weeklyHours) haben targetMinutes = 0; das Monats-Soll wird
   // erst über die offenen Tage abgeleitet (contract.ts), genau wie in der Prüfung.
-  const targetMin = schedule.employees.reduce((s, e) => s + monthlyTargetMinutesFor(e, openDates, schedule.workHours), 0);
+  const targetMin = activeEmployees.reduce((s, e) => s + monthlyTargetMinutesFor(e, openDates, schedule.workHours), 0);
   const plannedMin = schedule.shifts.reduce((s, x) => s + x.paidMinutes, 0);
   const uncoveredMin = Math.max(0, targetMin - plannedMin);
-  const notGenerated = schedule.shifts.length === 0;
+  const notGenerated = !schedule.shifts.some((s) => !byId.get(s.employeeId)?.isOwner);
 
   // Warnungen und Fehler getrennt: ein zu hohes Monats-Soll macht den Plan nicht
   // unbrauchbar, es fehlen nur Stunden, die der Monat nicht hergibt.

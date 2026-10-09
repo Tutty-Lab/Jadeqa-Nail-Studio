@@ -17,6 +17,7 @@
 // (siehe T()) – bewusst ohne Diakritika, so gewünscht.
 // ============================================================================
 
+import { isOnVacation } from "./availability";
 import { jsPDF } from "jspdf";
 import type { Employee, Schedule, Shift } from "../types";
 import {
@@ -231,7 +232,7 @@ function stundenzettelRowsFor(
         ? closed.note || "Betriebsruhe"
         : holiday
           ? `Frei (Feiertag: ${holiday})`
-          : "Frei";
+          : isOnVacation(employee, d) && wd !== "Sonntag" ? "Urlaub (Stunden offen)" : "Frei";
       return { shaded, shiftCount: 0, cells: [datum, "", "", "", "0,00", bemerkung] };
     }
 
@@ -386,7 +387,6 @@ function drawStundenzettel(
       ["Beschäftigungsart", employmentLabelDe(employee.employmentType)],
       ["Mitarbeiter", employee.name],
       ["Monat", MONTH_NAMES_DE[schedule.month - 1]],
-      ["Sollstunden", null], // von Hand einzutragen
       ["Jahr", String(schedule.year)],
     ],
     startY,
@@ -399,32 +399,15 @@ function drawStundenzettel(
   // Zusammenfassung + Unterschriften: FESTE Positionen im reservierten Band am
   // Seitenende – unabhängig davon, wo die Tabelle endet (keine Kollision mehr).
   const pageH = doc.internal.pageSize.getHeight();
-  const pageW = doc.internal.pageSize.getWidth();
   const summaryY = pageH - 30;
-  const col3 = (pageW - 2 * MARGIN) / 3;
-
-  const summary: Array<[string, string | null]> = [
-    ["Gesamtstunden", `${minutesToDecimalHours(totalMinutes)} h`],
-    ["Sollstunden", null],
-    ["Differenz", null],
-  ];
-  summary.forEach(([label, value], i) => {
-    const x = MARGIN + i * col3;
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(8.5);
-    doc.setTextColor(...MUTED);
-    doc.text(T(label), x, summaryY);
-    if (value === null) {
-      doc.setDrawColor(...GRID);
-      doc.setLineWidth(0.2);
-      doc.line(x, summaryY + 5, x + 26, summaryY + 5);
-    } else {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(10);
-      doc.setTextColor(...INK);
-      doc.text(T(value), x, summaryY + 5);
-    }
-  });
+  doc.setFont("helvetica", "normal");
+  doc.setFontSize(8.5);
+  doc.setTextColor(...MUTED);
+  doc.text("Gesamtstunden", MARGIN, summaryY);
+  doc.setFont("helvetica", "bold");
+  doc.setFontSize(10);
+  doc.setTextColor(...INK);
+  doc.text(`${minutesToDecimalHours(totalMinutes)} h`, MARGIN, summaryY + 5);
 
   drawSignatures(
     doc,
@@ -613,8 +596,8 @@ function drawGrid(
  *  - zwei Dienste -> beide Uhrzeiten (zwei Zeilen); die Stundenzahl kommt nur
  *    dazu, wo das Blatt Platz für eine dritte Zeile hat (withHours).
  */
-function shiftLines(shifts: Shift[], closed: boolean, withHours = false): string[] {
-  if (shifts.length === 0) return [closed ? "-" : "frei"];
+function shiftLines(shifts: Shift[], closed: boolean, withHours = false, vacation = false): string[] {
+  if (shifts.length === 0) return [closed ? "-" : vacation ? "Urlaub" : "frei"];
   const sorted = [...shifts].sort((a, b) => a.startMinutes - b.startMinutes);
   const stunden = (minutes: number) => minutesToDecimalHours(minutes, 2).replace(",00", "");
   if (sorted.length === 1) {
@@ -723,7 +706,7 @@ function drawDienstplan(
         cells: [
           [employee.name],
           // Hochformat: hier ist Platz für die dritte Zeile mit den Stunden.
-          ...opts.dates.map((d, i) => shiftLines(own[i], closedOn(d), true)),
+          ...opts.dates.map((d, i) => shiftLines(own[i], closedOn(d), true, isOnVacation(employee, d))),
           [`${minutesToDecimalHours(total, 2).replace(",00", "")}h`],
         ],
       };
@@ -759,7 +742,7 @@ function drawDienstplan(
         cells: [
           [format(parseIsoDate(d), "dd.MM.yyyy")],
           [WEEKDAY_LABELS_DE[weekdayKeyOf(parseIsoDate(d))] + (holiday ? ` · ${holiday}` : "")],
-          ...employees.map((e) => shiftLines(byKey.get(`${e.id}#${d}`) ?? [], closed)),
+          ...employees.map((e) => shiftLines(byKey.get(`${e.id}#${d}`) ?? [], closed, false, isOnVacation(e, d))),
         ],
       };
     });
@@ -788,5 +771,24 @@ export async function sharePdf(blob: Blob, filename: string): Promise<ShareResul
   } catch (err) {
     if (err instanceof Error && err.name === "AbortError") return "cancelled";
     return "failed";
+  }
+}
+
+/** Must be called directly from the save button to retain user activation. */
+export async function savePdfAtLocation(blob: Blob, filename: string): Promise<"saved" | "cancelled" | "downloaded"> {
+  const browser = window as unknown as { showSaveFilePicker?: (options: unknown) => Promise<{ createWritable: () => Promise<{ write: (data: Blob) => Promise<void>; close: () => Promise<void> }> }> };
+  if (!browser.showSaveFilePicker) {
+    deliver(blob, filename);
+    return "downloaded";
+  }
+  try {
+    const handle = await browser.showSaveFilePicker({ suggestedName: filename, types: [{ description: "PDF", accept: { "application/pdf": [".pdf"] } }] });
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return "saved";
+  } catch (err) {
+    if (err instanceof Error && err.name === "AbortError") return "cancelled";
+    throw err;
   }
 }

@@ -283,3 +283,8 @@ export function weightedDailyTargets(
   }
   return new Map(dates.map((date) => [date, share(date, total)]));
 }
+
+/** Soft preference including the owner; never a minimum-staff validation rule. */
+export function preferredStaff(weekday: WeekdayKey): number {
+  return weekday === "friday" || weekday === "saturday" ? 3 : 0;
+}

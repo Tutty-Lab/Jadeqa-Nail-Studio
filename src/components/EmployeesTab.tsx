@@ -1,3 +1,4 @@
+import { PayrollHistory } from "./PayrollHistory";
 import { useMemo, useState } from "react";
 import type { UseScheduleReturn } from "../hooks/useSchedule";
 import type { Employee, EmploymentType } from "../types";
@@ -41,6 +42,7 @@ function splitInfo(targetHours: number, type: EmploymentType): { ok: boolean; te
  * damit man das Feld leeren kann, ohne dass es auf 0 zurückspringt.
  */
 type Draft = {
+  vacations: NonNullable<Employee["vacations"]>;
   name: string;
   employmentType: EmploymentType;
   /** Wird der Vertrag je Woche oder je Monat geführt? */
@@ -60,6 +62,7 @@ type Draft = {
 
 function draftFrom(emp?: Employee): Draft {
   return {
+    vacations: emp?.vacations?.map((v) => ({ ...v })) ?? [],
     name: emp?.name ?? "",
     employmentType: emp?.employmentType ?? "VOLLZEIT",
     unit: emp?.weeklyHours != null ? "week" : "month",
@@ -113,6 +116,7 @@ function draftToEmployee(d: Draft): Omit<Employee, "id"> {
   const fixedStart = safeMinutes(d.fixedStart, FIXED_START_DEFAULT);
   const fixedEnd = safeMinutes(d.fixedEnd, FIXED_END_DEFAULT);
   return {
+    vacations: d.vacations,
     name: d.name.trim() || "Nhân viên mới",
     employmentType: d.employmentType,
     // Monatsvertrag: die Stunden stehen direkt im Soll. Wochenvertrag: das
@@ -192,7 +196,7 @@ export function EmployeesTab({ store }: { store: UseScheduleReturn }) {
           {schedule.employees.map((emp) => (
             <li key={emp.id}>
               <button
-                onClick={() => setOffen(emp.id)}
+                onClick={() => !emp.isOwner && setOffen(emp.id)}
                 className="w-full text-left rounded-lg border border-slate-200 p-3 flex items-center gap-3 hover:bg-slate-50 active:bg-slate-100 transition-colors"
               >
                 <EmployeeSummaryRow emp={emp} openDates={openDates} workHours={schedule.workHours} />
@@ -202,6 +206,8 @@ export function EmployeesTab({ store }: { store: UseScheduleReturn }) {
           ))}
         </ul>
       )}
+
+      <PayrollHistory employees={schedule.employees} />
 
       {!locked && (
         <button
@@ -249,9 +255,11 @@ function EmployeeSummaryRow({
   openDates: readonly string[];
   workHours: WorkHoursConfig;
 }) {
+  if (emp.isOwner) return <div className="flex-1"><div className="font-medium">Chủ tiệm</div><p className="text-xs text-slate-500">Luôn có mặt trong giờ mở cửa · tính vào nhân sự · không tính giờ lương nhân viên</p></div>;
   const monatMin = monthlyTargetMinutesFor(emp, openDates, workHours);
   const monatH = monatMin / 60;
   const info = splitInfo(monatH, emp.employmentType);
+  const record = emp.payrollRecords?.find((r) => r.month === openDates[0]?.slice(0, 7));
 
   return (
     <div className="flex-1 min-w-0">
@@ -263,7 +271,7 @@ function EmployeeSummaryRow({
       </div>
       <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-slate-500">
         <span>
-          {emp.weeklyHours != null
+          {record ? `${record.convertedHours.toLocaleString("de-DE", { minimumFractionDigits: 2 })}h tháng này (theo bảng lương)` : emp.weeklyHours != null
             ? `${emp.weeklyHours}h/tuần`
             : `${String(Math.round((emp.targetMinutes / 60) * 100) / 100).replace(".", ",")}h/tháng`}{" "}
           · {monatH > 0 ? `${minutesToShortHours(monatMin)} · ` : ""}
@@ -308,7 +316,7 @@ function EmployeeSheet({
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) =>
     setD((prev) => ({ ...prev, [k]: v }));
 
-  const monatMin = monthlyTargetMinutesFor({ ...draftToEmployee(d), id: employee?.id ?? "preview" }, openDates, workHours);
+  const monatMin = monthlyTargetMinutesFor({ ...employee, ...draftToEmployee(d), id: employee?.id ?? "preview" }, openDates, workHours);
   const monatH = monatMin / 60;
   const info = splitInfo(monatH, d.employmentType);
 
@@ -345,6 +353,19 @@ function EmployeeSheet({
             />
           </label>
 
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium">Urlaub — ngày nghỉ phép</legend>
+            <p className="text-xs text-slate-500">Không xếp ca trong khoảng này, gồm cả ngày đầu và cuối.</p>
+            {d.vacations.map((v, i) => <div key={i} className="flex flex-wrap items-end gap-2">
+              <label className="text-xs">Từ ngày<input aria-label={`Urlaub ${i + 1} từ ngày`} type="date" className={`${inputClass} block w-36`} value={v.start}
+                onChange={(e) => set("vacations", d.vacations.map((x, j) => j === i ? { ...x, start: e.target.value } : x))} /></label>
+              <label className="text-xs">Đến ngày<input aria-label={`Urlaub ${i + 1} đến ngày`} type="date" className={`${inputClass} block w-36`} value={v.end}
+                onChange={(e) => set("vacations", d.vacations.map((x, j) => j === i ? { ...x, end: e.target.value } : x))} /></label>
+              <button className="p-2 text-sm text-rose-600" onClick={() => set("vacations", d.vacations.filter((_, j) => j !== i))}>Xóa</button>
+            </div>)}
+            <button className="text-sm text-sky-700" onClick={() => set("vacations", [...d.vacations, { start: "", end: "" }])}>+ Thêm kỳ nghỉ</button>
+            {d.vacations.some((v) => !v.start || !v.end || v.end < v.start) && <p className="text-xs text-rose-600">Chọn đủ ngày; ngày kết thúc phải từ ngày bắt đầu trở đi.</p>}
+          </fieldset>
           <div className="grid grid-cols-3 gap-3">
             <label className="block">
               <span className="text-xs text-slate-600">Hình thức</span>
@@ -600,6 +621,7 @@ function EmployeeSheet({
                 </button>
                 <button
                   onClick={() => onSave(draftToEmployee(d))}
+                  disabled={d.vacations.some((v) => !v.start || !v.end || v.end < v.start)}
                   className="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
                 >
                   Lưu

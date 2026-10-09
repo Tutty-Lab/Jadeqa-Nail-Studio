@@ -6,7 +6,7 @@ import type { SchedulePrintLayout } from "./SchedulePrintPage";
 import {
   buildDienstplanPdfFor,
   buildStundenzettelPdfFor,
-  deliver,
+  savePdfAtLocation,
   safeFileName,
   sharePdf,
 } from "../lib/pdf";
@@ -75,16 +75,15 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
   /** Zweiter Klick für das Entsperren – ohne native Dialoge, siehe unten. */
   const [confirmUnlock, setConfirmUnlock] = useState(false);
 
-  const monthTag = `${schedule.year}-${String(schedule.month).padStart(2, "0")}`;
 
   // Für WER: "all" = alle Mitarbeiter BEIDER Filialen, sonst "<storeId>:<empId>".
   const [whoStoreId, whoEmpId] = who === "all" ? [null, null] : who.split(":");
 
   /** Mitarbeiter dieser Filiale, die in den Ausdruck kommen. */
   const chosenFor = (s: UseScheduleReturn): Employee[] => {
-    if (who === "all") return s.activeEmployees;
+    if (who === "all") return s.activeEmployees.filter((e) => !e.isOwner);
     if (s.storeId !== whoStoreId) return [];
-    return s.activeEmployees.filter((e) => e.id === whoEmpId);
+    return s.activeEmployees.filter((e) => !e.isOwner).filter((e) => e.id === whoEmpId);
   };
   /** employeeIds für den Dienstplan: undefined = ganze Filiale, [] = gar nicht. */
   const employeeIdsFor = (s: UseScheduleReturn): string[] | undefined => {
@@ -98,9 +97,9 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
   const previewStore = who === "all" ? primary : stores.find((s) => s.storeId === whoStoreId) ?? primary;
   const previewEmployee =
     who === "all"
-      ? previewStore.activeEmployees[0] ?? null
-      : previewStore.activeEmployees.find((e) => e.id === whoEmpId) ?? null;
-  const whoTag = who === "all" ? "tat_ca" : safeFileName(previewEmployee?.name ?? who);
+      ? previewStore.activeEmployees.filter((e) => !e.isOwner)[0] ?? null
+      : previewStore.activeEmployees.filter((e) => !e.isOwner).find((e) => e.id === whoEmpId) ?? null;
+  const pdfName = `${safeFileName(previewStore.schedule.companyName)}_${String(schedule.month).padStart(2, "0")}_${schedule.year}.pdf`;
 
   const startPdf = () => {
     setPdfBusy(true);
@@ -113,7 +112,7 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
   };
   /** Rechner/Chrome/Safari: đã tải thẳng. Trình duyệt nhúng: giữ file để bấm Lưu / Chia sẻ. */
   const finishPdf = (blob: Blob | null, filename: string) => {
-    if (inApp.inApp && blob) setReadyPdf({ blob, filename });
+    if (blob) setReadyPdf({ blob, filename });
   };
   const errorText = (err: unknown) =>
     `Không tạo được PDF: ${err instanceof Error ? err.message : String(err)}`;
@@ -140,7 +139,6 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
         progress,
       );
       const blob = doc.output("blob");
-      if (!inApp.inApp) await deliver(blob, filename);
       finishPdf(blob, filename);
     } catch (err) {
       setPdfError(errorText(err));
@@ -170,7 +168,6 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
         .filter((job) => job.employeeIds?.length !== 0);
       const doc = buildDienstplanPdfFor(jobs, range.layout);
       const blob = doc.output("blob");
-      if (!inApp.inApp) await deliver(blob, filename);
       finishPdf(blob, filename);
       if (range.weekStart) markWeekPrinted(range.weekStart);
     } catch (err) {
@@ -269,21 +266,20 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
 
   function onPdf() {
     if (what === "stundenzettel") {
-      void doPdf(`Stundenzettel_${whoTag}_${monthTag}.pdf`);
+      void doPdf(pdfName);
       return;
     }
     if (what.startsWith("sz-")) {
       const weekStart = what.slice(3);
       const sz = szWeekFor(weekStart);
       if (sz) {
-        void doPdf(`Stundenzettel_${whoTag}_${monthTag}_tuan_${weekStart}.pdf`, sz);
+        void doPdf(pdfName, sz);
       }
       return;
     }
     const range = scheduleRangeFor(what);
     if (!range) return;
-    const suffix = what === "month" ? "thang" : `tuan_${what}`;
-    void doPdfSchedule(range, `Dienstplan_${whoTag}_${suffix}_${monthTag}.pdf`);
+    void doPdfSchedule(range, pdfName);
   }
 
   // Vùng in KHÔNG được dọn theo sự kiện "afterprint": trên Android sự kiện đó
@@ -291,7 +287,7 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
   // — nội dung bị xoá mất và tờ in ra trắng. Vùng này vốn đã ẩn trên màn hình
   // nên cứ để nguyên; lần in sau sẽ ghi đè bằng danh sách mới.
 
-  if (stores.every((s) => s.activeEmployees.length === 0)) {
+  if (stores.every((s) => s.activeEmployees.filter((e) => !e.isOwner).length === 0)) {
     return (
       <div className="no-print rounded bg-white border border-slate-200 p-6 text-center text-slate-400">
         Vui lòng thêm nhân viên và tạo lịch làm việc trước.
@@ -333,7 +329,7 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
               >
                 <option value="all">Tất cả (cả tiệm)</option>
                 {stores.flatMap((s) =>
-                  s.activeEmployees.map((e) => (
+                  s.activeEmployees.filter((e) => !e.isOwner).map((e) => (
                     <option key={`${s.storeId}:${e.id}`} value={`${s.storeId}:${e.id}`}>
                       {s.storeConfig.shortName} · {e.name}
                     </option>
@@ -380,7 +376,7 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
               </button>
               <button
                 type="button"
-                disabled={pdfBusy || stores.every((s) => s.activeEmployees.length === 0)}
+                disabled={pdfBusy || stores.every((s) => s.activeEmployees.filter((e) => !e.isOwner).length === 0)}
                 onClick={() => {
                   if (isLocked) unlockMonth();
                   generate();
@@ -423,6 +419,15 @@ export function StundenzettelTab({ stores }: { stores: UseScheduleReturn[] }) {
                   ✕
                 </button>
               </div>
+              <button type="button" className="mt-2 mr-2 rounded bg-slate-900 px-4 py-2 text-sm font-semibold text-white"
+                onClick={async () => {
+                  try {
+                    const result = await savePdfAtLocation(readyPdf.blob, readyPdf.filename);
+                    setShareNote(result === "saved" ? "Đã lưu PDF vào nơi bạn chọn." : result === "cancelled" ? "Đã hủy lưu; PDF vẫn sẵn sàng." : "Đã tải PDF. Trình duyệt này dùng nơi lưu mặc định; bật ‘Hỏi nơi lưu từng tệp’ trong cài đặt Tải xuống của trình duyệt để chọn thư mục.");
+                  } catch (err) { setShareNote(`Không lưu được PDF: ${err instanceof Error ? err.message : String(err)}`); }
+                }}>
+                Chọn nơi lưu PDF
+              </button>
               <button
                 type="button"
                 onClick={() => void onSharePdf()}

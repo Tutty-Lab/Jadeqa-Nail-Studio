@@ -25,9 +25,12 @@ Passwort, eine Zeile in Supabase (`store_id = "jadeqa"`).
   Zeiten auf dem 30-Minuten-Raster. Pause: über 6 h 30 Minuten, über 8 h 60
   Minuten – und nach § 4 ArbZG nie mehr als 6 Stunden am Stück ohne Pause.
 - **Höchstens 5 Arbeitstage je Woche** für alle.
-- **Die Inhaberin steht nicht im Plan.** Sie ist meist im Laden, aber die
-  Öffnungszeit muss von den Angestellten allein abgedeckt werden – sonst sieht
-  ein Tag besetzt aus, an dem nur die Chefin da ist.
+- **Die Inhaberin ist während der gesamten Öffnungszeit anwesend.** Sie zählt
+  zur Besetzung, aber nicht zu den Lohnstunden der Angestellten. Die Planung
+  berücksichtigt diese Anwesenheit zuerst und priorisiert Mitarbeiter in Spitzenzeiten.
+- Freitag und Samstag: weiches Ziel von 3 anwesenden Personen einschließlich
+  Inhaberin während der Öffnung. Kein zusätzlicher Vertragsbedarf und kein
+  Validierungsfehler allein wegen Unterschreitung dieses Wunschziels.
 
 ## Eintritt und Austritt (neu gegenüber den anderen Studio-Apps)
 
@@ -53,19 +56,39 @@ Ohne „Wöch.Arb.Zt." auf der Abrechnung: **Brutto ÷ Mindestlohn**
 |---|---|---|---|
 | Thi Kim Oanh Pham | 01.11.2024 | — | 70,2 h/Monat (900 €) |
 | Tri Duc Nguyen | 01.05.2025 | — | 87,4 h/Monat (1.120 €) |
-| Dinh Hai Le | 15.05.2025 | **31.07.2025** | 93,6 h/Monat (1.200 €) |
+| Dinh Hai Le | 15.05.2025 | unbekannt | 93,6 h/Monat (1.200 €) |
 | Quynh Nhu Nguyen | 01.09.2025 | — | 19,5 h/Woche |
 | Van Anh Nguyen | 01.11.2025 | — | 5 h/Woche (Minijob) |
 | Thuy Linh Tran | 15.01.2026 | — | 19,5 h/Woche |
 
-Eine Sache muss der Betrieb bestätigen:
+## Nachmeldung vom 08.10.2026
 
-- **Geänderte Stunden:** Quynh Nhu Nguyen hatte 117 h (09/2025), dann
-   27 h/Woche, seit 02/2026 19,5 h/Woche. Hinterlegt ist der letzte Stand – für
-   einen älteren Monat vor dem Erzeugen umstellen.
+Die 14 gelieferten Brutto-/Stundenwerte stehen in `src/lib/history.ts` und im
+Tab „Nhân viên“. Auf ausdrücklichen Wunsch gelten die umgerechneten Stunden
+als Planungsziel nur für den jeweiligen Monat, auch bei Wochenverträgen.
+Diese Monatswerte werden nicht nochmals wegen Eintritt oder Schließtagen
+gekürzt. Nur Personen mit einem gelieferten Monatswert sowie die Inhaberin
+werden für den gewählten Monat eingeplant. Bei fehlenden Monatswerten bleiben
+Personalakte und allgemeiner Vertrag erhalten; daraus wird kein Austritt abgeleitet. Tri Nguyen und Tri Duc Nguyen werden
+als dieselbe vorhandene Person geführt. Hai hat einen August-Wert; der alte
+Austritt 31.07.2025 wurde entfernt, der tatsächliche Austritt ist unbekannt.
+
+- Studio geschlossen: 24.09.–09.10.2025 einschließlich, wegen Krankheit.
+- Quynh Nhu Nguyen: Urlaub 09.02.–06.03.2026 einschließlich.
+- Thi Kim Oanh Pham: Urlaub 01.01.–24.01.2025 einschließlich.
+
+Urlaub sperrt die Tage für die Planung und ist im Mitarbeitereditor änderbar.
+Das gewünschte Stunden-Soll bleibt bestehen; nicht planbare Stunden werden
+als Fehlstunden gewarnt. Die App rechnet in ganzen Minuten und plant im
+30-Minuten-Raster. Die gelieferten Dezimalstunden bleiben in der Tabelle
+unverändert erhalten. Bestehende Schichten werden nicht automatisch neu erzeugt;
+Konflikte mit Urlaub oder Schließtagen werden in der Prüfung angezeigt.
+Eine versionierte Migration übernimmt die Angaben auch in gespeicherte Stände.
 
 ## Was der Plan leistet
 
+Historischer Prüfstand **vor der Nachmeldung**, ohne die neuen Urlaubstage,
+Schließtage und Monatswerte (kein Nachweis für den aktuellen Datenstand).
 Nur mit den Angestellten (ohne Inhaberin), 05/2025–01/2027, geprüft mit
 `npx vite-node scripts/audit-schedule.mts`:
 
