@@ -23,6 +23,7 @@ import {
 import { datesOfMonth } from "../lib/demand";
 import { publicHolidays } from "../lib/holidays";
 import { initialScheduleFor, storeById, type StoreConfig } from "../lib/stores";
+import { archiveFromLegacySavedPlans, listSavedMonths, mergeArchives, switchMonth } from "../lib/monthArchive";
 import { contractOpenDays } from "../lib/contract";
 import { weekStartOf } from "../lib/weeks";
 import { withOwner } from "../lib/owner";
@@ -82,6 +83,12 @@ function normalizeSchedule(raw: Schedule | undefined, store: StoreConfig): Sched
     employees: (raw.employees ?? []).filter((e) => !REMOVED_EMPLOYEE_IDS.has(e.id)),
     shifts: withoutRemoved(raw.shifts ?? []),
     lockedAt: raw.lockedAt,
+    underQuotaAccepted: raw.underQuotaAccepted === true ? true : undefined,
+    // Archiv der anderen Monate; „Bản đã lưu" der Vorversion wird übernommen.
+    archive: archiveFromLegacySavedPlans({
+      ...raw,
+      archive: raw.archive && typeof raw.archive === "object" ? raw.archive : {},
+    }).archive,
     printedWeeks: Array.isArray(raw.printedWeeks) ? raw.printedWeeks : [],
   }));
 }
@@ -124,9 +131,19 @@ export function useSchedule(storeId: string) {
 
   // Immer sofort lokal sichern – das ist der Offline-Puffer. storeId wechselt im
   // SELBEN Update wie der Stand (setStoreId), daher passt beides zusammen.
+  // Vorher gespeicherte Monate aus dem LocalStorage übernehmen (anderer Tab),
+  // damit ein veralteter Tab nie einen gespeicherten Monat löscht.
   useEffect(() => {
+    const merged = mergeArchives(schedule, loadState(storeId)?.schedule);
+    if (merged !== schedule) {
+      setSchedule(merged); // speichert im nächsten Durchlauf
+      return;
+    }
     saveState(storeId, { schedule, originalShifts, passwordHash });
   }, [storeId, schedule, originalShifts, passwordHash]);
+
+  // Nach „Xoá dữ liệu" darf das Zusammenführen die alten Monate nicht zurückholen.
+  const skipArchiveMerge = useRef(false);
 
   // Letzter Stand für Zugriffe außerhalb des Renders (siehe Erst-Upload).
   const latest = useRef<PersistedState>({ schedule, originalShifts, passwordHash });
@@ -174,7 +191,15 @@ export function useSchedule(storeId: string) {
     if (!isRemoteConfigured || !hydrated.current) return;
     const timer = window.setTimeout(() => {
       setRemoteStatus("saving");
-      saveRemote(storeId, { schedule, originalShifts, passwordHash })
+      (async () => {
+        // Gespeicherte Monate anderer Geräte behalten (Archiv zusammenführen).
+        const skip = skipArchiveMerge.current;
+        skipArchiveMerge.current = false;
+        const remote = skip ? null : await loadRemote(storeId).catch(() => null);
+        const merged = mergeArchives(schedule, remote?.schedule);
+        await saveRemote(storeId, { schedule: merged, originalShifts, passwordHash });
+        if (merged !== schedule) setSchedule((cur) => mergeArchives(cur, remote?.schedule));
+      })()
         .then(() => setRemoteStatus("idle"))
         .catch(() => setRemoteStatus("error"));
     }, 1000);
@@ -207,6 +232,9 @@ export function useSchedule(storeId: string) {
     () => schedule.employees.filter((employee) => hasMonthData(employee, `${schedule.year}-${String(schedule.month).padStart(2, "0")}`) && openDates.some((date) => isEmployedOn(employee, date))),
     [schedule.employees, schedule.year, schedule.month, openDates],
   );
+
+  /** Für den Stundenzettel: ohne Inhaberin (keine Angestellte). */
+  const timesheetEmployees = useMemo(() => activeEmployees.filter((employee) => !employee.isOwner), [activeEmployees]);
 
   const validation: ValidationResult = useMemo(
     () => validateSchedule(activeEmployees, schedule.shifts, schedule.year, openDates, schedule.workHours),
@@ -250,18 +278,26 @@ export function useSchedule(storeId: string) {
 
   // ----- Firma / Monat / Öffnungszeiten -----
   const updateMeta = useCallback((patch: Partial<Schedule>) => {
-    setSchedule((s) => {
-      // Ein Monatswechsel beginnt einen neuen Plan: die Sperre des alten
-      // Monats darf nicht mitwandern.
-      const monthChanged =
-        (patch.year !== undefined && patch.year !== s.year) ||
-        (patch.month !== undefined && patch.month !== s.month);
-      if (monthChanged) {
-        return withOwner({ ...s, ...patch, lockedAt: undefined, printedWeeks: [] });
-      }
-      return withOwner({ ...s, ...patch });
-    });
+    const { schedule: s, originalShifts: original } = latest.current;
+    const nextYear = patch.year ?? s.year;
+    const nextMonth = patch.month ?? s.month;
+    if (nextYear === s.year && nextMonth === s.month) {
+      setSchedule((cur) => withOwner({ ...cur, ...patch }));
+      return;
+    }
+    // Monatswechsel: aktuellen Plan ablegen, gespeicherten Plan des Zielmonats
+    // laden (mit seiner Sperre und „Bỏ qua cảnh báo"). Die Inhaberin steht in
+    // jedem Monat im Plan (owner.ts).
+    const next = switchMonth(s, original, nextYear, nextMonth);
+    const schedulePatched = withOwner({ ...next.schedule, ...patch });
+    latest.current = { ...latest.current, schedule: schedulePatched, originalShifts: next.originalShifts };
+    setSchedule(schedulePatched);
+    setOriginalShifts(next.originalShifts);
+    setGenError(null);
   }, []);
+
+  /** Alle Monate mit gespeichertem Plan (inkl. des aktuell geöffneten). */
+  const savedMonths = useMemo(() => listSavedMonths(schedule), [schedule]);
 
   /** Sofort speichern, ohne die Entprell-Zeit abzuwarten (Sperren, Passwort). */
   const pushNow = useCallback(async (state: PersistedState) => {
@@ -389,7 +425,17 @@ export function useSchedule(storeId: string) {
         storeTag: storeConfig.id,
         seed: `${year}-${month}-${Date.now()}-${genNonce.current++}`,
       });
-      setSchedule((s) => ({ ...s, year, month, shifts, lockedAt: undefined, printedWeeks: [] }));
+      // Anderer Monat als der offene: den offenen Plan erst ins Archiv legen,
+      // sonst ginge er verloren. Derselbe Monat wird bewusst neu erzeugt.
+      // Neuer Plan: Sperre und „Bỏ qua cảnh báo" gelten nicht mehr.
+      const cur = latest.current;
+      const base =
+        year === cur.schedule.year && month === cur.schedule.month
+          ? cur.schedule
+          : switchMonth(cur.schedule, cur.originalShifts, year, month).schedule;
+      const next = { ...base, year, month, shifts, lockedAt: undefined, printedWeeks: [], underQuotaAccepted: undefined };
+      latest.current = { ...cur, schedule: next, originalShifts: shifts };
+      setSchedule(next);
       setOriginalShifts(shifts.map((sh) => ({ ...sh })));
       setGenStamp((n) => n + 1);
       return shifts;
@@ -414,6 +460,7 @@ export function useSchedule(storeId: string) {
   }, [originalShifts]);
 
   const resetAll = useCallback(() => {
+    skipArchiveMerge.current = true;
     clearState(storeId);
     setSchedule(emptySchedule(storeById(storeId)));
     setOriginalShifts([]);
@@ -527,8 +574,10 @@ export function useSchedule(storeId: string) {
     openDays,
     openDates,
     activeEmployees,
+    timesheetEmployees,
     isLocked,
     markWeekPrinted,
+    savedMonths,
     unlockMonth,
     genError,
     genStamp,

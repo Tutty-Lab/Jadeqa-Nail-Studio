@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { useSchedule, type UseScheduleReturn } from "./hooks/useSchedule";
+import { useEffect, useState } from "react";
+import { useSchedule } from "./hooks/useSchedule";
 import { GenerateScheduleDialog } from "./components/GenerateScheduleDialog";
 import { SettingsTab } from "./components/SettingsTab";
 import { EmployeesTab } from "./components/EmployeesTab";
@@ -9,20 +9,28 @@ import { DocsTab } from "./components/DocsTab";
 import { Dashboard } from "./components/Dashboard";
 import { LockScreen } from "./components/LockScreen";
 import { isAuthenticated, logout } from "./lib/auth";
-import { monthLabel } from "./lib/shiftOps";
 import { MONTH_NAMES_VI } from "./lib/dateFormat";
 import { isScheduleYearAllowed, SCHEDULE_YEARS } from "./lib/years";
 import { STORES } from "./lib/stores";
+import type { EmployeeChange } from "./lib/suggestions";
+
+/** Zuletzt angezeigter Laden (nur Ansicht, je Gerät). */
+const VIEW_KEY = "stundenzettel-app:view-store";
 
 type TabId = "einstellungen" | "mitarbeiter" | "dienstplan" | "stundenzettel";
 
-/** Die Arbeits-Tabs. „Tài liệu" ist bewusst KEIN Tab – es öffnet sich über die Kopfzeile. */
+/**
+ * Alle Ansichten. Sichtbar als Tab sind die drei, mit denen täglich gearbeitet
+ * wird (MAIN_TABS); Cài đặt und Tài liệu stecken im Menü ☰ oben rechts – der
+ * Bildschirm soll für den Chủ tiệm aufgeräumt sein.
+ */
 const TABS: { id: TabId; label: string }[] = [
-  { id: "einstellungen", label: "Cài đặt" },
-  { id: "mitarbeiter", label: "Nhân viên" },
   { id: "dienstplan", label: "Lịch làm việc" },
   { id: "stundenzettel", label: "Bảng chấm công" },
+  { id: "mitarbeiter", label: "Nhân viên" },
+  { id: "einstellungen", label: "Cài đặt" },
 ];
+const MAIN_TABS: TabId[] = ["dienstplan", "stundenzettel", "mitarbeiter"];
 
 export default function App() {
   const [unlocked, setUnlocked] = useState(() => isAuthenticated());
@@ -32,16 +40,40 @@ export default function App() {
 }
 
 function MainApp({ onLogout }: { onLogout: () => void }) {
-  // Beide Filialen laufen gleichzeitig – jede mit eigenem State, eigener
-  // Persistenz und eigener Sync. Angezeigt werden sie untereinander; es gibt
-  // bewusst KEIN Umschalten, der Betreiber sieht immer alle Läden.
+  // Alle Filialen laufen gleichzeitig – jede mit eigenem State, eigener
+  // Persistenz und eigener Sync. ANGEZEIGT wird nur der Laden, der in der
+  // Reihe unter den Tabs gewählt ist (drei Läden untereinander waren zu lang);
+  // die Kennzahlen oben zählen alle Läden zusammen. Erzeugt
+  // wird weiterhin für alle zusammen, wegen der Leute in zwei Läden.
+  // J'ADEQA: ein Studio. Der Rahmen (Liste „stores") bleibt wie in Shin Coco,
+  // damit Kennzahlen, Vorschläge und Ausdruck unverändert funktionieren.
   const jadeqa = useSchedule(STORES[0].id);
   const stores = [jadeqa];
+  const [viewId, setViewId] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem(VIEW_KEY);
+      if (saved && STORES.some((s) => s.id === saved)) return saved;
+    } catch {
+      // Speicher gesperrt – dann der erste Laden.
+    }
+    return STORES[0].id;
+  });
+  const chooseStore = (id: string) => {
+    setViewId(id);
+    try {
+      localStorage.setItem(VIEW_KEY, id);
+    } catch {
+      // egal – nur eine Bequemlichkeit
+    }
+  };
+  /** Der angezeigte Laden. */
+  const view = stores.find((s) => s.storeId === viewId) ?? jadeqa;
   // Monat/Jahr sind für alle gleich (der Ausdruck muss zusammenpassen). Der
   // Kopf steuert alle; angezeigt wird der Stand der ersten Filiale.
   const primary = jadeqa;
 
-  const [tab, setTab] = useState<TabId>("einstellungen");
+  const [tab, setTab] = useState<TabId>("dienstplan");
+  const [menuOpen, setMenuOpen] = useState(false);
   /** Trang Tài liệu mở riêng; đóng lại thì về đúng tab đang làm. */
   const [docsOpen, setDocsOpen] = useState(false);
 
@@ -73,6 +105,25 @@ function MainApp({ onLogout }: { onLogout: () => void }) {
     }
   };
 
+  /**
+   * „Áp dụng" aus „Tìm cách xếp khác": erst die Einstellungen ändern, dann –
+   * NACH dem nächsten Rendern, wenn die Läden die neuen Mitarbeiter kennen –
+   * alle Läden für den offenen Monat neu planen.
+   */
+  const [regenPending, setRegenPending] = useState(false);
+  const applyFixes = (changes: EmployeeChange[]) => {
+    for (const change of changes) {
+      stores.find((s) => s.storeId === change.storeId)?.updateEmployee(change.employeeId, change.patch);
+    }
+    setRegenPending(true);
+  };
+  useEffect(() => {
+    if (!regenPending) return;
+    setRegenPending(false);
+    generateAll({ year: primary.schedule.year, month: primary.schedule.month });
+    openTab("dienstplan");
+  }, [regenPending]); // eslint-disable-line react-hooks/exhaustive-deps
+
   /** Monat/Jahr für ALLE Filialen setzen. */
   const setPeriod = (patch: { year?: number; month?: number }) => {
     for (const s of stores) s.updateMeta(patch);
@@ -85,19 +136,35 @@ function MainApp({ onLogout }: { onLogout: () => void }) {
   // erfolgreichen Lauf; der Effekt liest DANACH die (frische) Prüfung beider
   // Filialen aus.
   const [toast, setToast] = useState<string | null>(null);
-  const genStampSum = jadeqa.genStamp;
+  /**
+   * Popup nach „Tạo lịch", wenn jemand sein Soll nicht erreicht: der Chủ tiệm
+   * sieht wer und wie viel, und entscheidet selbst – „Bỏ qua cảnh báo" nimmt es
+   * für diesen Plan hin (Dashboard wird grün), „Để sau" lässt die Warnung stehen.
+   */
+  const [quotaPopup, setQuotaPopup] = useState<{ storeId: string; name: string; messages: string[] }[] | null>(null);
+  const genStampSum = stores.reduce((sum, s) => sum + s.genStamp, 0);
   useEffect(() => {
     if (genStampSum === 0) return;
     const allErrors = stores.flatMap((s) => s.validation.errors);
     const fehler = allErrors.filter((e) => e.severity !== "warning").length;
     const warn = allErrors.filter((e) => e.severity === "warning").length;
+    const underQuota = allErrors.filter((e) => e.rule === "contract-hours").length;
     setToast(
       fehler > 0
         ? `Đã tạo lịch — nhưng còn ${fehler} lỗi, xem chi tiết ở phần trạng thái.`
         : warn > 0
-          ? `✓ Đã tạo lịch (còn ${warn} cảnh báo thiếu giờ — bấm (i) để xem).`
+          ? `✓ Đã tạo lịch (còn ${warn} cảnh báo${underQuota > 0 ? `, ${underQuota} người thiếu giờ` : ""} — bấm (i) để xem).`
           : `✓ Đã tạo lịch mới — hợp lệ, đúng giờ hợp đồng.`,
     );
+    const offen = stores
+      .map((s) => ({
+        storeId: s.storeId,
+        name: s.storeConfig.shortName,
+        // Nur fehlende Vertragsstunden – Độ dài ca/Khung giờ stehen im Dashboard.
+        messages: s.validation.errors.filter((e) => e.rule === "contract-hours").map((e) => e.message),
+      }))
+      .filter((x) => x.messages.length > 0);
+    setQuotaPopup(offen.length > 0 ? offen : null);
     const t = window.setTimeout(() => setToast(null), 5000);
     return () => window.clearTimeout(t);
   }, [genStampSum]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -107,104 +174,132 @@ function MainApp({ onLogout }: { onLogout: () => void }) {
       <header className="no-print bg-slate-900 text-white shadow sticky top-0 z-30">
         <div className="mx-auto max-w-[1500px] px-3 sm:px-4 py-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
           <div>
-            <h1 className="text-base sm:text-lg font-semibold">
+            {/* Nur der Titel – Version und Unterzeile weggelassen (Wunsch: aufgeräumt).
+                Nur ein SYNC-FEHLER wird gezeigt: dann liegen Daten nur auf diesem Gerät. */}
+            <h1 className="text-base sm:text-lg font-semibold" title={`bản ${__BUILD__}`}>
               Lịch làm việc &amp; Bảng chấm công
-              <span className="ml-2 align-middle text-[10px] font-normal text-slate-400">bản {__BUILD__}</span>
             </h1>
-            <p className="text-xs text-slate-300">
-              {STORES.map((s) => s.shortName).join(" · ")} ·{" "}
-              {monthLabel(primary.schedule.year, primary.schedule.month)}
-              {(() => {
-                const anyOn = stores.some((s) => s.remoteStatus !== "off");
-                if (!anyOn) return null;
-                const anyError = stores.some((s) => s.remoteStatus === "error");
-                const anySaving = stores.some((s) => s.remoteStatus === "saving");
-                return (
-                  <span className={anyError ? "ml-2 text-rose-300" : "ml-2 text-slate-400"}>
-                    ·{" "}
-                    {anySaving
-                      ? "đang đồng bộ…"
-                      : anyError
-                        ? "lỗi đồng bộ — dữ liệu chỉ lưu trên máy này"
-                        : "đã đồng bộ"}
-                  </span>
-                );
-              })()}
-            </p>
+            {stores.some((s) => s.remoteStatus === "error") && (
+              <p className="text-xs text-rose-300">Lỗi đồng bộ — dữ liệu chỉ lưu trên máy này</p>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            {/* Tháng/năm của bản kế hoạch và bản in. */}
+            {/* Tháng/năm dùng chung cho mọi tiệm – bản in phải cùng kỳ. Tiệm chọn ở hàng nhãn dưới các tab. */}
             <div className="inline-flex items-center gap-1.5" aria-label="Chọn kỳ">
               <select
                 aria-label="Tháng"
-                value={primary.schedule.month}
-                onChange={(e) => setPeriod({ month: Number(e.target.value) })}
-                className="rounded-md border border-slate-600 bg-white px-2 py-1.5 text-sm font-medium text-slate-900"
-              >
-                {MONTH_NAMES_VI.map((name, i) => (
-                  <option key={name} value={i + 1} className="bg-white text-slate-900">
-                    {name}
-                  </option>
-                ))}
-              </select>
-              <select
-                aria-label="Năm"
-                value={primary.schedule.year}
-                onChange={(e) => setPeriod({ year: Number(e.target.value) })}
+                value={`${primary.schedule.year}-${primary.schedule.month}`}
+                onChange={(e) => {
+                  const [year, month] = e.target.value.split("-").map(Number);
+                  setPeriod({ year, month });
+                }}
                 className="rounded-md border border-slate-600 bg-white px-2 py-1.5 text-sm font-medium text-slate-900"
               >
                 {(isScheduleYearAllowed(primary.schedule.year)
                   ? SCHEDULE_YEARS
                   : [primary.schedule.year, ...SCHEDULE_YEARS]
-                ).map((y) => (
-                  <option key={y} value={y} className="bg-white text-slate-900">
-                    {y}
-                  </option>
-                ))}
+                ).flatMap((y) =>
+                  MONTH_NAMES_VI.map((_, i) => (
+                    <option key={`${y}-${i + 1}`} value={`${y}-${i + 1}`} className="bg-white text-slate-900">
+                      {String(i + 1).padStart(2, "0")}/{y}
+                    </option>
+                  )),
+                )}
               </select>
             </div>
-            <button
-              type="button"
-              onClick={() => setDocsOpen((open) => !open)}
-              aria-pressed={docsOpen}
-              className={`rounded px-3 py-2 text-sm ${docsOpen ? "bg-white text-slate-900" : "bg-slate-700 hover:bg-slate-600"}`}
-            >
-              Tài liệu
-            </button>
-            <button
-              onClick={() => {
-                if (confirm("Xoá toàn bộ dữ liệu của tiệm?")) {
-                  for (const s of stores) s.resetAll();
-                }
-              }}
-              className="rounded bg-slate-700 px-3 py-2 text-sm hover:bg-slate-600"
-            >
-              Xoá dữ liệu
-            </button>
-            <button
-              onClick={() => {
-                logout();
-                onLogout();
-              }}
-              className="rounded bg-slate-700 px-3 py-2 text-sm hover:bg-slate-600"
-            >
-              Đăng xuất
-            </button>
+            {/* Aus dem Menü geöffnete Seite: steht direkt neben dem Menü, mit ✕ zurück. */}
+            {(docsOpen || !MAIN_TABS.includes(tab)) && (
+              <span className="inline-flex items-center gap-1 rounded-md bg-white py-1.5 pl-3 pr-1 text-sm font-medium text-slate-900">
+                {docsOpen ? "Tài liệu" : TABS.find((t) => t.id === tab)?.label}
+                <button
+                  type="button"
+                  onClick={() => openTab("dienstplan")}
+                  aria-label="Đóng"
+                  className="rounded px-1.5 text-slate-400 hover:text-slate-900"
+                >
+                  ✕
+                </button>
+              </span>
+            )}
+            {/* Menu: alles, was nicht täglich gebraucht wird. */}
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((open) => !open)}
+                aria-expanded={menuOpen}
+                aria-haspopup="menu"
+                className={`rounded px-3 py-2 text-sm font-medium ${menuOpen ? "bg-white text-slate-900" : "bg-slate-700 hover:bg-slate-600"}`}
+              >
+                ☰ Menu
+              </button>
+              {menuOpen && (
+                <>
+                  {/* Klick daneben schliesst das Menü. */}
+                  <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                  <div
+                    role="menu"
+                    className="absolute right-0 z-50 mt-2 w-52 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 text-sm text-slate-800 shadow-lg"
+                  >
+                    {(
+                      [
+                        ["Cài đặt", () => openTab("einstellungen")],
+                        ["Tài liệu", () => setDocsOpen(true)],
+                      ] as const
+                    ).map(([label, action]) => (
+                      <button
+                        key={label}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          action();
+                          setMenuOpen(false);
+                        }}
+                        className="block w-full px-4 py-2 text-left hover:bg-slate-50"
+                      >
+                        {label}
+                      </button>
+                    ))}
+                    <div className="my-1 border-t border-slate-100" />
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        if (confirm("Xoá toàn bộ dữ liệu của tiệm?")) {
+                          for (const s of stores) s.resetAll();
+                        }
+                      }}
+                      className="block w-full px-4 py-2 text-left text-rose-700 hover:bg-rose-50"
+                    >
+                      Xoá dữ liệu
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        logout();
+                        onLogout();
+                      }}
+                      className="block w-full px-4 py-2 text-left hover:bg-slate-50"
+                    >
+                      Đăng xuất
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         </div>
       </header>
 
       <div className="no-print mx-auto max-w-[1500px] px-3 sm:px-4 pt-4 space-y-4">
-        {stores.map((s) => (
-          <StoreSection key={s.storeId} store={s}>
-            <Dashboard store={s} />
-          </StoreSection>
-        ))}
+        <Dashboard stores={stores} view={view} onChooseStore={chooseStore} onApplyFixes={applyFixes} />
       </div>
 
       <nav className="no-print mx-auto max-w-[1500px] px-3 sm:px-4 mt-4">
         <div className="flex flex-wrap gap-2">
-          {TABS.map((t) => {
+          {TABS.filter((t) => MAIN_TABS.includes(t.id)).map((t) => {
             const active = !docsOpen && tab === t.id;
             return (
               <button
@@ -225,12 +320,37 @@ function MainApp({ onLogout }: { onLogout: () => void }) {
             type="button"
             onClick={() => setGenDialogOpen(true)}
             disabled={stores.every((s) => s.schedule.employees.length === 0)}
-            className="ml-auto rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700 active:bg-slate-800 disabled:opacity-40"
+            className="ml-auto rounded-lg border border-emerald-700 bg-emerald-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 active:bg-emerald-800 disabled:opacity-40"
           >
-            Tạo lịch làm việc
+            Tạo lịch
           </button>
         </div>
       </nav>
+
+      {/* Tiệm đang xem – một hàng nhãn dùng chung cho mọi tab (thay ô chọn tiệm ở đầu trang). */}
+      {!docsOpen && stores.length > 1 && (
+        <div className="no-print mx-auto max-w-[1500px] px-3 sm:px-4 mt-3">
+          <div role="tablist" aria-label="Tiệm" className="inline-flex rounded-lg border border-slate-200 bg-white p-1">
+            {stores.map((s) => {
+              const active = s.storeId === view.storeId;
+              return (
+                <button
+                  key={s.storeId}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => chooseStore(s.storeId)}
+                  className={`rounded-md px-3 py-1.5 text-sm font-medium ${
+                    active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                >
+                  {s.storeConfig.shortName}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Popup chọn tháng/năm – nhắc kiểm tra ngày lễ/giờ đặc biệt, cảnh báo thay lịch và mở khóa. */}
       {genDialogOpen && (
@@ -251,6 +371,54 @@ function MainApp({ onLogout }: { onLogout: () => void }) {
             openTab("dienstplan");
           }}
         />
+      )}
+
+      {quotaPopup && (
+        <div className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true">
+          <div className="w-full max-w-lg rounded-lg bg-white shadow-xl">
+            <div className="border-b border-slate-100 px-5 py-4">
+              <h2 className="text-base font-semibold text-slate-900">Có người chưa đủ giờ định mức</h2>
+              <p className="mt-1 text-sm text-slate-600">
+                Lịch vẫn dùng được. Tháng này không đủ ngày trống để xếp đủ giờ cho những người dưới đây.
+              </p>
+            </div>
+            <div className="max-h-[50vh] space-y-3 overflow-y-auto px-5 py-4 text-sm">
+              {quotaPopup.map((x) => (
+                <div key={x.storeId}>
+                  <div className="mb-1 font-semibold text-slate-800">{x.name}</div>
+                  <ul className="list-disc space-y-0.5 pl-5 text-slate-700">
+                    {x.messages.map((m, i) => (
+                      <li key={i}>{m}</li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+              <p className="rounded bg-emerald-50 px-3 py-2 text-emerald-900">
+                Muốn app tìm cách xếp đủ giờ: bấm <b>Để sau</b>, rồi bấm <b>Tìm cách xếp khác</b> ở phần cảnh báo phía trên —
+                app tạo lịch thử và gợi ý thay đổi kèm nút <b>Áp dụng</b>.
+              </p>
+            </div>
+            <div className="flex flex-wrap justify-end gap-2 border-t border-slate-100 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setQuotaPopup(null)}
+                className="rounded border border-slate-300 bg-white px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+              >
+                Để sau
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  for (const x of quotaPopup) stores.find((s) => s.storeId === x.storeId)?.updateMeta({ underQuotaAccepted: true });
+                  setQuotaPopup(null);
+                }}
+                className="rounded bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-700"
+              >
+                Bỏ qua cảnh báo
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {(stores.some((s) => s.genError) || toast) && (
@@ -300,33 +468,23 @@ function MainApp({ onLogout }: { onLogout: () => void }) {
         ) : (
           <>
             <div className="no-print space-y-6">
-              {tab === "einstellungen" &&
-                stores.map((s) => (
-                  <StoreSection key={s.storeId} store={s}>
-                    <SettingsTab store={s} />
-                  </StoreSection>
-                ))}
-              {tab === "mitarbeiter" &&
-                stores.map((s) => (
-                  <StoreSection key={s.storeId} store={s}>
-                    <EmployeesTab store={s} />
-                  </StoreSection>
-                ))}
+              {tab === "einstellungen" && <SettingsTab key={view.storeId} store={view} />}
+              {tab === "mitarbeiter" && <EmployeesTab key={view.storeId} store={view} allStores={stores} />}
             </div>
             {/*
               „Bảng chấm công" chứa vùng in và không nằm trong khối no-print.
               „Lịch làm việc" cũng nằm ngoài vì tự mang no-print riêng.
             */}
             {tab === "dienstplan" && (
-              <div className="space-y-6">
-                {stores.map((s) => (
-                  <StoreSection key={s.storeId} store={s}>
-                    <ScheduleTab store={s} />
-                  </StoreSection>
-                ))}
-              </div>
+              <ScheduleTab key={view.storeId} store={view} openMonth={(year, month) => setPeriod({ year, month })} />
             )}
-            {tab === "stundenzettel" && <StundenzettelTab stores={stores} />}
+            {/* Nur der gewählte Laden – die PDF ist damit eine Datei je Laden. */}
+            {tab === "stundenzettel" && <StundenzettelTab
+                key={view.storeId}
+                stores={[view]}
+                regenerate={() => generateAll({ year: primary.schedule.year, month: primary.schedule.month })}
+                openMonth={(year, month) => setPeriod({ year, month })}
+              />}
           </>
         )}
       </main>
@@ -334,17 +492,3 @@ function MainApp({ onLogout }: { onLogout: () => void }) {
   );
 }
 
-/** Ein Filial-Abschnitt mit Kopfzeile (Filialname). Kopf ist nie im Druck. */
-function StoreSection({ store, children }: { store: UseScheduleReturn; children: ReactNode }) {
-  return (
-    <section>
-      <div className="no-print mb-2 flex items-center gap-2">
-        <span className="rounded-md bg-slate-900 px-2.5 py-1 text-sm font-semibold text-white">
-          {store.storeConfig.shortName}
-        </span>
-        <span className="text-sm text-slate-500">{store.storeConfig.name}</span>
-      </div>
-      {children}
-    </section>
-  );
-}
