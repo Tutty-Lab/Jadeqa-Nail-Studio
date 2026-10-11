@@ -11,6 +11,7 @@
 
 import type { Employee, Schedule, Shift } from "../types";
 import { generateSchedule } from "./scheduler";
+import { employeesForMonth } from "./history";
 import { validateSchedule, type ValidationError } from "./validation";
 import { analyzeSchedule } from "./analyze";
 import { datesOfMonth, WEEKDAY_SHORT_VI, type WeekdayKey } from "./demand";
@@ -83,7 +84,8 @@ export function planAll(stores: readonly TrialStore[]): Map<string, Shift[]> {
       month: schedule.month,
       workHours: schedule.workHours,
       overrides: overridesOf(schedule),
-      employees: schedule.employees,
+      // Gleiche Auswahl wie „Tạo lịch" (history.ts).
+      employees: employeesForMonth(schedule.employees, `${schedule.year}-${String(schedule.month).padStart(2, "0")}`),
       rules: store.rules,
       weights: store.weights,
       blockedDays: blocked,

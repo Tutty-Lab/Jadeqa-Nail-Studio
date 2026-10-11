@@ -72,3 +72,27 @@ describe("studio history reported 08.10.2026", () => {
     }
   }, 20000);
 });
+
+describe("Monat ohne Lohnabrechnung", () => {
+  it("09/2026: alle Angestellten nach Vertrag, nicht nur die Inhaberin", async () => {
+    const { storeById, initialScheduleFor } = await import("../stores");
+    const { withOwner } = await import("../owner");
+    const { employeesForMonth } = await import("../history");
+    const { generateSchedule } = await import("../scheduler");
+    const store = storeById("jadeqa");
+    const schedule = withOwner(applyReportedHistory({ ...initialScheduleFor(store), year: 2026, month: 9 }));
+    const employees = employeesForMonth(schedule.employees, "2026-09");
+    expect(employees.length).toBe(schedule.employees.length);
+    const shifts = generateSchedule({ year: 2026, month: 9, workHours: schedule.workHours, employees, rules: store.staffingRules, weights: store.dayWeights });
+    const staffShifts = shifts.filter((s) => !employees.find((e) => e.id === s.employeeId)?.isOwner);
+    expect(staffShifts.length).toBeGreaterThan(50);
+  }, 60_000);
+
+  it("Monat MIT Lohnabrechnung bleibt wie abgerechnet: 07/2025 nur Tri Duc (+ Inhaberin)", async () => {
+    const { storeById, initialScheduleFor } = await import("../stores");
+    const { withOwner } = await import("../owner");
+    const { employeesForMonth } = await import("../history");
+    const schedule = withOwner(applyReportedHistory({ ...initialScheduleFor(storeById("jadeqa")), year: 2025, month: 7 }));
+    expect(employeesForMonth(schedule.employees, "2025-07").filter((e) => !e.isOwner).map((e) => e.id)).toEqual(["jadeqa-2"]);
+  });
+});

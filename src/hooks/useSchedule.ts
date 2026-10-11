@@ -27,7 +27,7 @@ import { archiveFromLegacySavedPlans, listSavedMonths, mergeArchives, switchMont
 import { contractOpenDays } from "../lib/contract";
 import { weekStartOf } from "../lib/weeks";
 import { withOwner } from "../lib/owner";
-import { applyReportedHistory, hasMonthData } from "../lib/history";
+import { applyReportedHistory, employeesForMonth } from "../lib/history";
 import { isEmployedOn, mayWorkOn } from "../lib/availability";
 
 /**
@@ -229,7 +229,9 @@ export function useSchedule(storeId: string) {
    * Stundenzettel. Im Tab „Nhân viên" bleiben trotzdem alle sichtbar.
    */
   const activeEmployees = useMemo(
-    () => schedule.employees.filter((employee) => hasMonthData(employee, `${schedule.year}-${String(schedule.month).padStart(2, "0")}`) && openDates.some((date) => isEmployedOn(employee, date))),
+    () =>
+      employeesForMonth(schedule.employees, `${schedule.year}-${String(schedule.month).padStart(2, "0")}`)
+        .filter((employee) => openDates.some((date) => isEmployedOn(employee, date))),
     [schedule.employees, schedule.year, schedule.month, openDates],
   );
 
@@ -418,7 +420,7 @@ export function useSchedule(storeId: string) {
         month,
         workHours: schedule.workHours,
         overrides: overridesToMap(schedule.dateOverrides),
-        employees: schedule.employees.filter((e) => hasMonthData(e, `${year}-${String(month).padStart(2, "0")}`)),
+        employees: employeesForMonth(schedule.employees, `${year}-${String(month).padStart(2, "0")}`),
         rules: storeConfig.staffingRules,
         weights: storeConfig.dayWeights,
         blockedDays,

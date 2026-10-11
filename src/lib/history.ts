@@ -64,3 +64,16 @@ export function employeeForMonth(employee: Employee, month: string): Employee {
 export function hasMonthData(employee: Employee, month: string): boolean {
   return Boolean(employee.isOwner || employee.payrollRecords?.some((r) => r.month === month));
 }
+
+/**
+ * Wer wird in diesem Monat eingeplant?
+ *
+ * Monat MIT Lohnabrechnung (irgendeine Person hat einen Wert): nur diese Personen
+ * und die Inhaberin – so wird der Monat wie abgerechnet nachgebildet.
+ * Monat OHNE Lohnabrechnung (z. B. 09/2026, jeder künftige Monat): normale
+ * Planung nach Vertrag, sonst stünde nur die Inhaberin im Plan.
+ */
+export function employeesForMonth(employees: readonly Employee[], month: string): Employee[] {
+  const monthHasPayroll = employees.some((e) => !e.isOwner && e.payrollRecords?.some((r) => r.month === month));
+  return monthHasPayroll ? employees.filter((e) => hasMonthData(e, month)) : [...employees];
+}
