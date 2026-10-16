@@ -3,82 +3,26 @@ import type { UseScheduleReturn } from "../hooks/useSchedule";
 import type { Employee } from "../types";
 import { minutesToDecimalHours } from "../lib/time";
 import { monthlyTargetMinutesFor } from "../lib/contract";
-import { RULES, ruleById } from "../lib/rules";
+import { RULES, ruleById, staffingRuleId } from "../lib/rules";
 import { explainShortfall } from "../lib/shortfall";
 import { findFixes, issuesOf, type EmployeeChange, type FixResult, type Score, type TrialStore } from "../lib/suggestions";
 
-function Stat({
-  label,
-  value,
-  accent,
-  detail,
-  detailOnPhone = false,
-}: {
-  label: string;
-  value: string;
-  accent?: string;
-  /** Kleine Zeile darunter, z. B. die Aufteilung je Laden. */
-  detail?: React.ReactNode;
-  /** Auf dem Handy nur zeigen, wo sie nötig ist – sonst wird die Kachel zu hoch. */
-  detailOnPhone?: boolean;
-}) {
-  return (
-    <div className="rounded-lg bg-white border border-slate-200 px-2.5 py-1.5 sm:px-3 sm:py-2 shadow-sm">
-      <div className="text-[11px] sm:text-xs text-slate-500 leading-tight">{label}</div>
-      <div className={`text-base sm:text-lg font-semibold leading-tight ${accent ?? "text-slate-900"}`}>
-        {value}
-      </div>
-      {detail && (
-        <div className={`mt-0.5 text-[11px] leading-tight text-slate-400 ${detailOnPhone ? "" : "hidden sm:block"}`}>
-          {detail}
-        </div>
-      )}
-    </div>
-  );
-}
-
-/**
- * Aufklappbarer Hinweis: eine Zeile mit Zusammenfassung und (i)-Knopf; die
- * ausführliche Begründung erscheint erst beim Klick. So steht bei einer Warnung
- * nicht mehr die ganze Liste dauerhaft auf dem Bildschirm.
- */
-function InfoNote({
-  tone,
-  summary,
-  children,
-}: {
-  tone: "error" | "warning";
-  summary: string;
-  children: React.ReactNode;
-}) {
+/** Eine Zeile je Warnungsart im Popup; Klick klappt die Einzelheiten auf. */
+function WarningGroup({ title, cls, children }: { title: string; cls: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
-  const cls =
-    tone === "error"
-      ? "bg-rose-50 border-rose-200 text-rose-900"
-      : "bg-amber-50 border-amber-200 text-amber-900";
-  const icon = tone === "error" ? "✕" : "!";
-  const badge = tone === "error" ? "bg-rose-200 text-rose-800" : "bg-amber-200 text-amber-800";
   return (
-    <div className={`mt-2 rounded border text-sm ${cls}`}>
+    <section className="border-t border-slate-100 first:border-t-0">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 px-3 py-2 text-left"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left"
       >
-        <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs font-bold ${badge}`}>
-          {icon}
-        </span>
-        <span className="flex-1 font-medium">{summary}</span>
-        <span
-          className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-current/40 text-xs font-semibold opacity-70"
-          title={open ? "Ẩn chi tiết" : "Xem chi tiết vì sao"}
-        >
-          {open ? "×" : "i"}
-        </span>
+        <span className={`text-sm font-semibold ${cls}`}>{title}</span>
+        <span className="text-slate-400">{open ? "▾" : "▸"}</span>
       </button>
-      {open && <div className="border-t border-current/15 px-3 py-2 font-normal">{children}</div>}
-    </div>
+      {open && <div className="px-4 pb-3 text-sm text-slate-700">{children}</div>}
+    </section>
   );
 }
 
@@ -97,7 +41,16 @@ function storeFigures(store: UseScheduleReturn) {
   const alleWarnungen = validation.errors.filter((e) => e.severity === "warning");
   // Vom Chủ tiệm im Popup nach „Tạo lịch" bewusst übergangen -> nicht mehr anzeigen.
   const accepted = schedule.underQuotaAccepted === true;
+  // Trong giờ mở / chốt ca 15:00 & 22:00 không có ai (luật cứng „closing").
+  // Lịch vẫn được tạo; trạng thái báo thành cảnh báo thay vì „Hợp lệ".
+  const emptyGaps = schedule.shifts.length === 0
+    ? 0
+    : store.analysis.peakViolations.reduce(
+        (n, day) => n + day.peaks.filter((p) => !p.ok && p.minStaff < p.required && staffingRuleId(p.label) === "closing").length,
+        0,
+      );
   return {
+    emptyGaps,
     targetMin,
     plannedMin,
     uncoveredMin: Math.max(0, targetMin - plannedMin),
@@ -112,8 +65,6 @@ function storeFigures(store: UseScheduleReturn) {
 }
 
 const hours = (min: number) => `${minutesToDecimalHours(min, 1)} h`;
-/** Aufteilung je Laden: ganze Stunden reichen und halten die Zeile kurz. */
-const roundHours = (min: number) => `${minutesToDecimalHours(min, 0)} h`;
 
 /**
  * Kennzahlen als SUMME aller Läden („Tạo lịch" plant alle zusammen), darunter
@@ -134,25 +85,13 @@ export function Dashboard({
 }) {
   const figures = stores.map((s) => ({ store: s, f: storeFigures(s) }));
   const sum = (pick: (f: ReturnType<typeof storeFigures>) => number) => figures.reduce((t, x) => t + pick(x.f), 0);
-  // Aufteilung je Laden nur, wenn es mehrere gibt (J'ADEQA: ein Studio).
-  const multi = stores.length > 1;
-  const perStore = (text: (x: (typeof figures)[number]) => string) =>
-    multi ? figures.map((x) => `${x.store.storeConfig.shortName} ${text(x)}`).join(" · ") : undefined;
-
-  // Ohne Inhaberin: sie ist keine Angestellte.
-  const allEmployees = stores.flatMap((s) => s.schedule.employees.filter((e) => !e.isOwner));
-  // Wer in mehreren Läden arbeitet (gleicher personKey), ist EIN Mensch.
-  const people = new Set(
-    stores.flatMap((s) => s.schedule.employees.filter((e) => !e.isOwner).map((e) => e.personKey || `${s.storeId}:${e.id}`)),
-  ).size;
-  const sharedPeople = allEmployees.length - people;
-  const countType = (type: Employee["employmentType"]) => allEmployees.filter((e) => e.employmentType === type).length;
 
   const targetMin = sum((f) => f.targetMin);
   const plannedMin = sum((f) => f.plannedMin);
   const uncoveredMin = sum((f) => f.uncoveredMin);
   const fehlerCount = sum((f) => f.fehler.length);
   const warnCount = sum((f) => f.warnungen.length);
+  const gapCount = sum((f) => f.emptyGaps);
   const notGeneratedCount = figures.filter((x) => x.f.notGenerated && x.store.schedule.employees.length > 0).length;
 
   const statusValue =
@@ -160,8 +99,10 @@ export function Dashboard({
       ? "Chưa tạo lịch"
       : fehlerCount > 0
         ? `${fehlerCount} lỗi`
-        : warnCount > 0
-          ? `${warnCount} cảnh báo`
+        : gapCount > 0
+          ? `⚠ ${gapCount} chỗ trống người`
+          : warnCount > 0
+            ? `${warnCount} cảnh báo`
           : notGeneratedCount > 0
             ? `${notGeneratedCount} tiệm chưa có lịch`
             : "Hợp lệ";
@@ -170,7 +111,7 @@ export function Dashboard({
       ? "text-slate-500"
       : fehlerCount > 0
         ? "text-rose-600"
-        : warnCount > 0 || notGeneratedCount > 0
+        : gapCount > 0 || warnCount > 0 || notGeneratedCount > 0
           ? "text-amber-600"
           : "text-emerald-600";
 
@@ -180,8 +121,8 @@ export function Dashboard({
       ? ["chưa tạo", "text-slate-400"]
       : f.fehler.length > 0
         ? [`${f.fehler.length} lỗi`, "text-rose-600"]
-        : f.warnungen.length > 0
-          ? [`${f.warnungen.length} cảnh báo`, "text-amber-600"]
+        : f.emptyGaps > 0 || f.warnungen.length > 0
+          ? [`${f.emptyGaps + f.warnungen.length} cảnh báo`, "text-amber-600"]
           : ["ổn", "text-emerald-600"];
     return (
       <button
@@ -195,40 +136,46 @@ export function Dashboard({
     );
   });
 
+  const multiStore = stores.length > 1;
+  const pct = targetMin > 0 ? Math.min(100, Math.round((plannedMin / targetMin) * 100)) : 0;
+  const statusPill =
+    statusAccent === "text-emerald-600"
+      ? "bg-emerald-50 text-emerald-700"
+      : statusAccent === "text-rose-600"
+        ? "bg-rose-50 text-rose-700"
+        : statusAccent === "text-amber-600"
+          ? "bg-amber-50 text-amber-700"
+          : "bg-slate-100 text-slate-500";
+
   return (
     <div>
-      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-2">
-        <Stat
-          label="Số nhân viên"
-          value={String(people)}
-          detailOnPhone
-          detail={
-            multi ? (
-              <>
-                {perStore((x) => String(x.store.schedule.employees.filter((e) => !e.isOwner).length))}
-                {sharedPeople > 0 && <> · {sharedPeople} người làm nhiều tiệm</>}
-              </>
-            ) : undefined
-          }
-        />
-        <Stat label="Toàn thời gian" value={String(countType("VOLLZEIT"))} />
-        <Stat label="Bán thời gian" value={String(countType("TEILZEIT"))} />
-        <Stat label="Minijob" value={String(countType("MINIJOB"))} />
-        <Stat label="Tổng giờ định mức" value={hours(targetMin)} detail={perStore((x) => roundHours(x.f.targetMin))} />
-        <Stat label="Tổng giờ đã xếp" value={hours(plannedMin)} detail={perStore((x) => roundHours(x.f.plannedMin))} />
-        <Stat
-          label="Giờ chưa thể xếp"
-          value={hours(uncoveredMin)}
-          accent={uncoveredMin ? "text-amber-600" : "text-emerald-600"}
-          detail={perStore((x) => roundHours(x.f.uncoveredMin))}
-        />
-        <Stat
-          label="Trạng thái kiểm tra"
-          value={statusValue}
-          accent={statusAccent}
-          detailOnPhone
-          detail={multi ? <span className="flex flex-wrap gap-x-2">{storeStatus}</span> : undefined}
-        />
+      {/* Eine Karte: verplante Stunden als Balken + Status. */}
+      <div>
+        <div className="rounded-lg border border-slate-200 bg-white p-3 shadow-sm">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-sm text-slate-500">Giờ đã xếp</span>
+            <span className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${statusPill}`}>
+              {statusValue === "Hợp lệ" ? "✓ Hợp lệ" : statusValue}
+            </span>
+          </div>
+          <div className="mt-1 flex items-baseline gap-1.5">
+            <span className="text-2xl font-semibold text-slate-900">{minutesToDecimalHours(plannedMin, 0)}</span>
+            <span className="text-sm text-slate-500">/ {hours(targetMin)} định mức</span>
+          </div>
+          {/* Dunkel = verplant, Gelb = fehlt noch (Giờ chưa thể xếp). Farbe nur für Status. */}
+          <div className="mt-2 flex h-2.5 overflow-hidden rounded-full bg-slate-100">
+            <div className="bg-slate-700" style={{ width: `${pct}%` }} />
+            {uncoveredMin > 0 && plannedMin > 0 && <div className="bg-amber-300" style={{ width: `${100 - pct}%` }} />}
+          </div>
+          {uncoveredMin > 0 && notGeneratedCount < stores.length && (
+            <div className="mt-1.5 text-xs text-slate-600">
+              Còn thiếu <b className="text-amber-700">{hours(uncoveredMin)}</b> chưa xếp được
+            </div>
+          )}
+          {multiStore && (
+            <div className="mt-1 flex flex-wrap gap-x-2 text-[11px] text-slate-400">{storeStatus}</div>
+          )}
+        </div>
       </div>
 
       <StoreNotes store={view} stores={stores} onApplyFixes={onApplyFixes} />
@@ -299,12 +246,31 @@ function StoreNotes({
   const { issues } = useMemo(() => issuesOf(trialStoreOf(store), schedule.shifts), [store, schedule.shifts]);
   // „Bỏ qua cảnh báo" nach Tạo lịch: fehlende Stunden nicht mehr anzeigen.
   const shown = issues.filter((issue) => !(accepted && issue.rule === "contract-hours"));
-  const hard = shown.filter((issue) => issue.hard);
+  // Giờ mở không có ai (thiếu thợ) – demo: chỉ cảnh báo, lịch vẫn dùng được.
+  const gaps = shown.filter((issue) => issue.hard && issue.rule === "closing");
+  const hard = shown.filter((issue) => issue.hard && issue.rule !== "closing");
   const soft = shown.filter((issue) => !issue.hard);
   const softGroups = RULES.filter((rule) => rule.kind === "soft")
     .map((rule) => ({ rule, items: soft.filter((issue) => issue.rule === rule.id) }))
     .filter((group) => group.items.length > 0);
   const hasPlan = !notGenerated;
+  const [open, setOpen] = useState(false);
+  const total = hard.length + gaps.length + soft.length;
+  const tone = hard.length > 0 ? "error" : "warning";
+  const headline = [
+    hard.length > 0 && `${hard.length} lỗi`,
+    gaps.length > 0 && `${gaps.length} chỗ không có người trực`,
+    soft.length > 0 && `${soft.length} chỗ chưa đạt luật mềm`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  // Mỗi loại cảnh báo: MỘT dòng, bấm mới mở danh sách.
+  const section = (title: string, cls: string, children: React.ReactNode) => (
+    <WarningGroup key={title} title={title} cls={cls}>
+      {children}
+    </WarningGroup>
+  );
 
   return (
     <div>
@@ -314,17 +280,28 @@ function StoreNotes({
         </div>
       )}
 
-      {hasPlan && hard.length > 0 && (
-        <InfoNote tone="error" summary={`${name}: ${hard.length} lỗi luật cứng — cần sửa`}>
-          <ul className="space-y-1.5">
-            {hard.map((issue, i) => (
-              <li key={i}>
-                <span className="mr-1 rounded bg-rose-100 px-1 text-[11px] font-medium">{ruleById(issue.rule).title}</span>
-                {issue.message}
-              </li>
-            ))}
-          </ul>
-        </InfoNote>
+      {/* EINE Warnleiste; Details im Popup. */}
+      {hasPlan && total > 0 && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className={`mt-2 flex w-full items-center gap-2.5 rounded-lg border px-3 py-2.5 text-left text-sm ${
+            tone === "error" ? "border-rose-200 bg-rose-50 text-rose-900" : "border-amber-200 bg-amber-50 text-amber-900"
+          }`}
+        >
+          <span
+            className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+              tone === "error" ? "bg-rose-200 text-rose-800" : "bg-amber-200 text-amber-800"
+            }`}
+          >
+            !
+          </span>
+          <span className="min-w-0 flex-1">
+            <span className="block font-medium">Lịch đã tạo, nhưng cần xem lại</span>
+            <span className="block truncate text-xs opacity-80">{headline}</span>
+          </span>
+          <span className="shrink-0 text-xs font-semibold underline underline-offset-2">Xem</span>
+        </button>
       )}
 
       {accepted && alleWarnungen.length > 0 && hasPlan && (
@@ -340,42 +317,78 @@ function StoreNotes({
         </div>
       )}
 
-      {hasPlan && soft.length > 0 && (
-        <InfoNote
-          tone="warning"
-          summary={`${name}: ${soft.length} chỗ chưa đạt luật mềm (lịch vẫn dùng được) — ${softGroups
-            .map((g) => `${g.rule.title.toLowerCase()} ${g.items.length}`)
-            .join(" · ")}`}
+      {open && (
+        <div
+          className="no-print fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setOpen(false)}
+          role="presentation"
         >
-          <div className="space-y-3">
-            {softGroups.map(({ rule, items }) => (
-              <div key={rule.id}>
-                <div className="font-semibold">
-                  {rule.title} <span className="font-normal opacity-70">({items.length})</span>
-                </div>
-                <ul className="mt-1 space-y-1.5">
-                  {items.slice(0, 12).map((issue, i) => {
-                    const emp = issue.employeeId ? byId.get(issue.employeeId) : undefined;
-                    return (
+          <div
+            role="dialog"
+            aria-modal="true"
+            className="flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden rounded-lg bg-white shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3">
+              <h3 className="font-semibold text-slate-900">Cần xem lại · {total}</h3>
+              <button
+                type="button"
+                onClick={() => setOpen(false)}
+                aria-label="Đóng"
+                className="-mr-2 h-9 w-9 rounded-full text-xl leading-none text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto overscroll-contain">
+              {hard.length > 0 &&
+                section(`Lỗi luật cứng (${hard.length})`, "text-rose-700", (
+                  <ul className="space-y-1.5">
+                    {hard.map((issue, i) => (
                       <li key={i}>
-                        <div>{issue.message}</div>
-                        {rule.id === "contract-hours" && emp && <ShortfallDetail store={store} stores={stores} employee={emp} />}
+                        <span className="mr-1 rounded bg-rose-100 px-1 text-[11px] font-medium">{ruleById(issue.rule).title}</span>
+                        {issue.message}
                       </li>
-                    );
-                  })}
-                  {items.length > 12 && <li className="opacity-70">… và {items.length - 12} chỗ nữa</li>}
-                </ul>
+                    ))}
+                  </ul>
+                ))}
+              {gaps.length > 0 &&
+                section(`Không có người trực (${gaps.length})`, "text-amber-700", (
+                  <>
+                    <p className="mb-1.5 text-slate-500">
+                      Tiệm mở nhưng không có ai làm. Thêm nhân viên hoặc tăng giờ rồi bấm Tạo lịch lại.
+                    </p>
+                    <ul className="space-y-1">
+                      {gaps.slice(0, 20).map((issue, i) => (
+                        <li key={i}>{issue.message}</li>
+                      ))}
+                      {gaps.length > 20 && <li className="text-slate-400">… và {gaps.length - 20} chỗ nữa</li>}
+                    </ul>
+                  </>
+                ))}
+              {softGroups.map(({ rule, items }) =>
+                section(`${rule.title} (${items.length})`, "text-slate-800", (
+                  <ul className="space-y-1.5">
+                    {items.slice(0, 12).map((issue, i) => {
+                      const emp = issue.employeeId ? byId.get(issue.employeeId) : undefined;
+                      return (
+                        <li key={i}>
+                          <div>{issue.message}</div>
+                          {rule.id === "contract-hours" && emp && <ShortfallDetail store={store} stores={stores} employee={emp} />}
+                        </li>
+                      );
+                    })}
+                    {items.length > 12 && <li className="text-slate-400">… và {items.length - 12} chỗ nữa</li>}
+                  </ul>
+                )),
+              )}
+              <div className="border-t border-slate-100 px-4 py-3">
+                <FixFinder stores={stores} onApply={onApplyFixes} month={`${schedule.month}/${schedule.year}`} />
               </div>
-            ))}
+            </div>
           </div>
-        </InfoNote>
+        </div>
       )}
-
-      {hasPlan && (hard.length > 0 || soft.length > 0) && (
-        <FixFinder stores={stores} onApply={onApplyFixes} month={`${schedule.month}/${schedule.year}`} />
-      )}
-
-      <RulesList />
     </div>
   );
 }
@@ -467,15 +480,25 @@ function FixFinder({
   );
 }
 
-/** Welche Regeln hart, welche weich – zum Nachlesen. */
-function RulesList() {
+/** Welche Regeln hart, welche weich – zum Nachlesen. Geöffnet aus ☰ Menu. */
+export function RulesPanel({ onClose }: { onClose: () => void }) {
   return (
-    <details className="mt-2 rounded-lg border border-slate-200 bg-white text-sm">
-      <summary className="cursor-pointer px-3 py-2 text-slate-600">
-        Luật xếp lịch: <b className="text-slate-900">{RULES.filter((r) => r.kind === "hard").length} luật cứng</b> ·{" "}
-        <b className="text-slate-900">{RULES.filter((r) => r.kind === "soft").length} luật mềm</b>
-      </summary>
-      <div className="grid gap-3 border-t border-slate-100 px-3 py-2 sm:grid-cols-2">
+    <div className="rounded-lg border border-slate-200 bg-white text-sm">
+      <div className="flex items-center justify-between border-b border-slate-100 px-3 py-2">
+        <span className="font-medium text-slate-800">
+          Luật xếp lịch · {RULES.filter((r) => r.kind === "hard").length} luật cứng ·{" "}
+          {RULES.filter((r) => r.kind === "soft").length} luật mềm
+        </span>
+        <button
+          type="button"
+          onClick={onClose}
+          className="text-lg leading-none text-slate-400 hover:text-slate-600"
+          aria-label="Đóng"
+        >
+          ×
+        </button>
+      </div>
+      <div className="grid gap-3 px-3 py-2 sm:grid-cols-2">
         {(["hard", "soft"] as const).map((kind) => (
           <div key={kind}>
             <div className={`font-semibold ${kind === "hard" ? "text-rose-700" : "text-amber-700"}`}>
@@ -491,6 +514,6 @@ function RulesList() {
           </div>
         ))}
       </div>
-    </details>
+    </div>
   );
 }

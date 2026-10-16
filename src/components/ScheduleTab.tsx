@@ -13,15 +13,23 @@ import { signedHours } from "../lib/dateFormat";
 import { isDayClosed } from "../lib/workHours";
 import { publicHolidays } from "../lib/holidays";
 import { ShiftCellEditor } from "./ShiftCellEditor";
-import { SavedSchedulesButton } from "./SavedSchedules";
 import { ScheduleDayView } from "./ScheduleDayView";
+import { StundenzettelTab } from "./StundenzettelTab";
 import { weeksOfMonth } from "../lib/weeks";
 import { employmentShortVi } from "../lib/employment";
 import { monthlyTargetMinutesFor, SCHEDULE_SLOT_MINUTES } from "../lib/contract";
 import { StaffingReport } from "./StaffingReport";
-import { PauseLabel } from "./PauseLabel";
 import type { PeakCoverage } from "../lib/analyze";
 import { ruleById, staffingRuleId } from "../lib/rules";
+
+/** „17", „11½" (halbe Stunde), sonst „11:15" – so bleibt die Zelle schmal. */
+function shortTime(minutes: number): string {
+  const h = Math.floor(minutes / 60);
+  const m = minutes % 60;
+  if (m === 0) return String(h);
+  if (m === 30) return `${h}½`;
+  return minutesToTime(minutes);
+}
 
 function isWeekendKey(iso: string): boolean {
   const k = weekdayKeyOf(parseIsoDate(iso));
@@ -36,14 +44,14 @@ function cellClass(shift: Shift | undefined): string {
 
 export function ScheduleTab({
   store,
-  openMonth,
+  mode,
 }: {
   store: UseScheduleReturn;
-  /** Gespeicherten Monat öffnen – für ALLE Läden (App.setPeriod). */
-  openMonth?: (year: number, month: number) => void;
+  /** Tab „Chấm công" (Stundenzettel + PDF) oder Tab „Lịch" – Tháng/Tuần/Ngày gilt nur für den Lịch. */
+  mode: "schedule" | "timesheet";
 }) {
-  // Drucken (Monat/Woche) und Entsperren liegen im Tab „Bảng chấm công" –
-  // dort sitzt alles, was Papier erzeugt.
+  // Drucken (Monat/Woche) und Entsperren liegen in der Ansicht „Chấm công"
+  // (StundenzettelTab) – dort sitzt alles, was Papier erzeugt.
   // Nút „Tạo lịch làm việc" và popup nằm trên thanh tab (App.tsx).
   const { schedule, validation, isLocked, openDates } = store;
   const [selected, setSelected] = useState<{ employeeId: string; date: string } | null>(null);
@@ -149,40 +157,16 @@ export function ScheduleTab({
           Druckbereich ganz unten übrig. */}
       <div className="no-print">
       {/*
-        Nur ein kurzer Hinweis - Drucken und Entsperren sitzen im Tab
-        "Bang cham cong". Ohne diesen Hinweis klickt man hier auf eine Zelle
-        und nichts passiert, ohne zu erfahren warum.
+        Eine Leiste (die Tabs Chấm công / Lịch sitzen in App.tsx): die
+        Bedienung der Ansicht (Lịch: Tháng/Tuần/Ngày, bei Tuần die Wochenwahl)
+        und „Xuất PDF". Sperr-Hinweis mit Mở khóa kommt ebenfalls von dort.
       */}
-      {isLocked && (
-        <div className="mb-3 rounded bg-amber-50 border border-amber-200 text-amber-900 text-sm px-3 py-2">
-          Lịch tháng này đã khóa vì đã in
-          {schedule.lockedAt && ` lúc ${new Date(schedule.lockedAt).toLocaleString("vi-VN")}`} — chỉ
-          xem, không sửa được. Mở khóa ở tab <b>Bảng chấm công</b>, hoặc bấm <b>Tạo lịch</b> để
-          tạo lại.
-        </div>
-      )}
-
-      {/* Chuyển chế độ xem: Tháng (mặc định) · Tuần · Ngày. Tuần chọn bằng một ô gọn. */}
       {hasEmployees && (
-        <div className="mb-3 flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-            {(
-              [
-                ["grid", "Tháng"],
-                ["week", "Tuần"],
-                ["day", "Ngày"],
-              ] as const
-            ).map(([id, label]) => (
-              <button
-                key={id}
-                onClick={() => setView(id)}
-                aria-pressed={view === id}
-                className={`px-3 py-1.5 text-sm rounded-md ${view === id ? "bg-slate-900 text-white" : "text-slate-600"}`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        <StundenzettelTab
+          stores={[store]}
+          mode={mode}
+          toolbarRight={
+            <>
           {view === "week" && weeks.length > 0 && (
             <div className="inline-flex items-center rounded-lg border border-slate-200 bg-white">
               <button
@@ -217,14 +201,25 @@ export function ScheduleTab({
               </button>
             </div>
           )}
-          {openMonth && <SavedSchedulesButton store={store} openMonth={openMonth} />}
-        </div>
+            <select
+              aria-label="Xem theo"
+              value={view}
+              onChange={(e) => setView(e.target.value as typeof view)}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800"
+            >
+              <option value="grid">Tháng</option>
+              <option value="week">Tuần</option>
+              <option value="day">Ngày</option>
+            </select>
+            </>
+          }
+        />
       )}
 
-      {schedule.shifts.length > 0 && <StaffingReport analysis={store.analysis} />}
+      {mode === "schedule" && schedule.shifts.length > 0 && <StaffingReport analysis={store.analysis} />}
 
       {/* Lỗi kiểm tra */}
-      {!validation.valid && schedule.shifts.length > 0 && (
+      {mode === "schedule" && !validation.valid && schedule.shifts.length > 0 && (
         <div className="mb-3 rounded bg-rose-50 border border-rose-200 text-rose-700 text-sm px-3 py-2">
           <div className="font-medium mb-1">Lỗi kiểm tra ({validation.errors.length}):</div>
           <ul className="list-disc pl-5 space-y-0.5 max-h-40 overflow-auto">
@@ -236,7 +231,7 @@ export function ScheduleTab({
       )}
 
       {/* Chú thích (bảng tháng và bảng tuần dùng chung lưới) */}
-      {(view === "grid" || view === "week") && (
+      {mode === "schedule" && (view === "grid" || view === "week") && (
         <div className="flex flex-wrap gap-3 mb-2 text-xs text-slate-600">
           <span className="inline-flex items-center gap-1">
             <span className="inline-block h-3 w-3 rounded border shift-early" /> Ca sáng
@@ -257,18 +252,16 @@ export function ScheduleTab({
         <div className="rounded bg-white border border-slate-200 p-6 text-center text-slate-400">
           Vui lòng thêm nhân viên trước.
         </div>
-      ) : view === "day" ? (
+      ) : mode === "timesheet" ? null : view === "day" ? (
         <ScheduleDayView store={store} onEdit={(employeeId, date) => setSelected({ employeeId, date })} />
       ) : (
         <div className="overflow-x-auto rounded-lg border border-slate-200 bg-white -mx-3 sm:mx-0">
           <table className="border-collapse text-xs">
             <thead>
               <tr>
-                <th className="sticky left-0 z-20 bg-slate-100 border-b border-r border-slate-200 px-2 py-2 text-left min-w-[130px]">
+                <th className="sticky left-0 z-20 bg-slate-100 border-b border-r border-slate-200 px-1.5 py-1 text-left w-[80px] max-w-[80px]">
                   Nhân viên
                 </th>
-                <th className="bg-slate-100 border-b border-slate-200 px-2 py-2 text-left">Loại</th>
-                <th className="bg-slate-100 border-b border-slate-200 px-2 py-2 text-right">Định mức</th>
                 {gridDates.map((d) => {
                   const day = parseIsoDate(d).getDate();
                   const wk = WEEKDAY_SHORT_VI[weekdayKeyOf(parseIsoDate(d))];
@@ -291,12 +284,12 @@ export function ScheduleTab({
                             ? `Giờ riêng${ov.note ? " · " + ov.note : ""}`
                             : undefined
                       }
-                      className={`border-b border-l border-slate-200 px-1 py-1 text-center min-w-[88px] ${headerBg}`}
+                      className={`border-b border-l border-slate-200 px-0.5 py-1 text-center min-w-[40px] ${headerBg}`}
                     >
                       <div className="font-semibold">{day}</div>
                       <div className="text-[10px] text-slate-500">{wk}</div>
-                      {closed && <div className="text-[9px] text-rose-600 font-medium">Đóng cửa</div>}
-                      {!closed && ov && <div className="text-[9px] text-sky-700 font-medium">Giờ riêng</div>}
+                      {closed && <div className="text-[9px] text-rose-600 font-medium">Đóng</div>}
+                      {!closed && ov && <div className="text-[9px] text-sky-700 font-medium">Riêng</div>}
                     </th>
                   );
                 })}
@@ -320,14 +313,12 @@ export function ScheduleTab({
                   : 0;
                 return (
                   <tr key={emp.id} className="hover:bg-slate-50/50">
-                    <td className="sticky left-0 z-10 bg-white border-b border-r border-slate-200 px-2 py-1 font-medium whitespace-nowrap">
+                    {/* Nur der Name (gekürzt); Art und Soll stehen im Tab Nhân viên – so passen mehr Tage auf den Schirm. */}
+                    <td
+                      className="sticky left-0 z-10 bg-white border-b border-r border-slate-200 px-1.5 py-1 font-medium w-[80px] max-w-[80px] truncate"
+                      title={emp.isOwner ? `${emp.name} · Chủ tiệm` : `${emp.name} · ${employmentShortVi(emp.employmentType)} · ${minutesToShortHours(sollMin)}`}
+                    >
                       {emp.name}
-                    </td>
-                    <td className="border-b border-slate-100 px-2 py-1 text-slate-500">
-                      {emp.isOwner ? "Chủ" : employmentShortVi(emp.employmentType)}
-                    </td>
-                    <td className="border-b border-slate-100 px-2 py-1 text-right text-slate-500">
-                      {emp.isOwner ? "—" : minutesToShortHours(sollMin)}
                     </td>
                     {gridDates.map((d) => {
                       const dienste = shiftMap.get(`${emp.id}#${d}`) ?? [];
@@ -336,46 +327,22 @@ export function ScheduleTab({
                         <td
                           key={d}
                           onClick={() => setSelected({ employeeId: emp.id, date: d })}
-                          className={`border-b border-l border-slate-200 px-1 py-1 text-center cursor-pointer align-middle ${cellClass(
+                          className={`border-b border-l border-slate-200 px-0.5 py-1 text-center cursor-pointer align-middle ${cellClass(
                             shift,
                           )}`}
                           title="Bấm để sửa"
                         >
                           {shift ? (
-                            <div className="leading-tight space-y-1">
-                              {dienste.map((x, idx) => {
-                                const isMulti = dienste.length > 1;
-                                const shiftTag = isMulti
-                                  ? idx === 0
-                                    ? "Ca sáng"
-                                    : idx === 1
-                                      ? "Ca chiều"
-                                      : `Ca ${idx + 1}`
-                                  : null;
-                                return (
-                                  <div
-                                    key={x.id}
-                                    className={idx > 0 ? "border-t border-slate-200/90 pt-1 mt-0.5" : ""}
-                                  >
-                                    <div className="font-medium flex items-center justify-center gap-1">
-                                      {shiftTag && (
-                                        <span className="inline-block text-[9px] font-semibold text-slate-600 bg-slate-100/90 border border-slate-300/80 rounded px-1">
-                                          {shiftTag}
-                                        </span>
-                                      )}
-                                      <span>
-                                        {minutesToTime(x.startMinutes)}–{minutesToTime(x.endMinutes)}
-                                      </span>
-                                    </div>
-                                    <div className="text-[10px] opacity-80">
-                                      {emp.isOwner ? "Có mặt tại tiệm" : <>{minutesToShortHours(x.paidMinutes)} · <PauseLabel shift={x} /></>}
-                                    </div>
-                                  </div>
-                                );
-                              })}
+                            // Kurz: „11:30–15" / „17–22" je Dienst untereinander.
+                            <div className="leading-tight whitespace-nowrap text-[10px] font-medium">
+                              {dienste.map((x) => (
+                                <div key={x.id}>
+                                  {shortTime(x.startMinutes)}–{shortTime(x.endMinutes)}
+                                </div>
+                              ))}
                             </div>
                           ) : (
-                            <span className="text-[11px]">{isOnVacation(emp, d) ? "Urlaub" : "Nghỉ"}</span>
+                            <span className="text-[10px] text-slate-300">{isOnVacation(emp, d) ? "Urlaub" : "–"}</span>
                           )}
                         </td>
                       );
@@ -457,12 +424,10 @@ function SummaryRow({
 }) {
   return (
     <tr className="bg-slate-50 text-slate-600">
-      <td className="sticky left-0 z-10 bg-slate-50 border-t border-r border-slate-200 px-2 py-1 font-medium whitespace-nowrap">
+      <td className="sticky left-0 z-10 bg-slate-50 border-t border-r border-slate-200 px-1.5 py-1 font-medium w-[80px] max-w-[80px] text-[10px] leading-tight">
         {label}
         {hint && <span className="ml-1 text-[11px] font-normal text-slate-400">{hint}</span>}
       </td>
-      <td className="border-t border-slate-200" />
-      <td className="border-t border-slate-200" />
       {dates.map((d) => (
         <td key={d} className="border-t border-l border-slate-200 px-1 py-1 text-center">
           {value(d)}
@@ -497,7 +462,7 @@ function CoverageRow({
   return (
     <tr className="bg-slate-50 text-slate-600">
       <td
-        className="sticky left-0 z-10 bg-slate-50 border-t border-r border-slate-200 px-2 py-1 font-medium max-w-[150px] leading-tight"
+        className="sticky left-0 z-10 bg-slate-50 border-t border-r border-slate-200 px-1.5 py-1 font-medium w-[80px] max-w-[80px] text-[10px] leading-tight"
         title={`${hard ? "Luật cứng" : "Luật mềm"}: ${label} ${when}`}
       >
         {label} <span className="text-[11px] font-normal text-slate-400">{when} · người (vắng–đông)</span>
@@ -507,8 +472,6 @@ function CoverageRow({
           {hard ? "cứng" : "mềm"}
         </span>
       </td>
-      <td className="border-t border-slate-200" />
-      <td className="border-t border-slate-200" />
       {dates.map((d) => {
         const list = peaks(d);
         if (!list || list.length === 0) {
@@ -523,22 +486,16 @@ function CoverageRow({
         const need = Math.max(...list.map((p) => p.required));
         const allowed = Math.min(...list.map((p) => p.allowed));
         const short = list.some((p) => p.minStaff < p.required);
-        const over = list.some((p) => p.maxStaff > p.allowed);
         return (
           <td
             key={d}
             className={`border-t border-l border-slate-200 px-1 py-1 text-center ${
-              short
-                ? "bg-rose-50 font-semibold text-rose-700 outline outline-2 -outline-offset-2 outline-rose-500"
-                : over
-                  ? "bg-amber-50 text-amber-800 outline outline-2 -outline-offset-2 outline-amber-400"
-                  : ""
+              short ? "bg-rose-50 font-semibold text-rose-700 outline outline-2 -outline-offset-2 outline-rose-500" : ""
             }`}
             title={`ít nhất ${min}, đông nhất ${max} · luật: ${need}${Number.isFinite(allowed) ? `–${allowed}` : "+"} người`}
           >
             {min === max ? min : `${min}–${max}`}
             {short && <span className="block text-[10px] leading-none">cần {need}</span>}
-            {!short && over && <span className="block text-[10px] leading-none">tối đa {allowed}</span>}
           </td>
         );
       })}
